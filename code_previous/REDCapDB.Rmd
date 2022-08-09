@@ -1,0 +1,324 @@
+---
+title: "Redcap DataBase"
+author: "lizet"
+output: html_notebook
+---
+
+Load 4 data sets (one screening, 3 follow ups at 3 cities) from the server using API tokens
+
+NOTE: Uncomment lines #145 and #146 to save weekly
+
+```{r}
+###################
+#load 4 datasets (one screening, 3 follow ups at 3 cities)
+# RUN THIS ONCE A WEEK - Thursday evening
+###################
+params <-
+  list(token1 = "YourToken", token2 = "YourToken", token3 = "YourToken", 
+       token4 = "YourToken")
+
+knitr::opts_chunk$set(echo = FALSE)
+# Define API Tokens
+api_token_scr <- params$token1
+api_token_kano <- params$token2
+api_token_kaduna <- params$token3
+api_token_zaria <- params$token4
+
+# Screening and Physical Exam
+api_token_scr <- "7B924E8054D5DEF7F49C0633564D4A8D"
+# Kano FU
+api_token_kano <- "86B37E8983E66E06E20AAED3CA74EEC8"
+# Kaduna FU
+api_token_kaduna <- "AA48B332DF00B24A0C9AC6636534507F"
+# Zaria FU
+api_token_zaria <- "D82653B801FE43BC5341DFD5CF4B9512"
+#Specialist visit
+api_token_specialist <- "B6E2731207A52177561B28DADB3D57FA"
+#13> 18> consent
+api_token_agedconsent <- "7F263D6AB5F9A735A2887C709882F1F4"
+
+api_url <- 'https://redcap.vanderbilt.edu/api/'
+
+library(REDCapR)
+library(magrittr)
+library(dplyr)
+library(car)
+library(beepr)
+
+# Screening and Physical Exam
+BaseDat <- redcap_read(redcap_uri=api_url, token=api_token_scr, verbose = FALSE, raw_or_label = "raw", raw_or_label_headers = "raw")$data
+# Kano Followup
+datKano <- redcap_read(redcap_uri=api_url, token=api_token_kano,verbose = FALSE, raw_or_label = "raw", raw_or_label_headers = "raw")$data
+# Kaduna Followup
+datKaduna <- redcap_read(redcap_uri=api_url, token=api_token_kaduna,verbose = FALSE, raw_or_label = "raw", raw_or_label_headers = "raw")$data
+# Zaria Followup
+datZaria <- redcap_read(redcap_uri=api_url, token=api_token_zaria,verbose = FALSE, raw_or_label = "raw", raw_or_label_headers = "raw")$data
+#Specialist
+SpecialDat <- redcap_read(redcap_uri=api_url, token=api_token_specialist,verbose = FALSE, raw_or_label = "raw", raw_or_label_headers = "raw")$data
+#Aged Consent
+AgedDat <- redcap_read(redcap_uri=api_url, token=api_token_agedconsent,verbose = FALSE, raw_or_label = "raw", raw_or_label_headers = "raw")$data
+
+###############
+```
+
+Combine the 3 city project records into one file
+
+```{r,  echo=FALSE, results='hide', eval =TRUE}
+
+source("../code_previous/BRIDGE_DatIn_rename.R") ##rename variables
+
+## create city variable and combine the 3 follow up datasets
+##
+datKaduna$city <- 1
+datKano$city <- 2
+datZaria$city <- 3
+
+FollowDat <- data.frame(rbind(datKano,datZaria,datKaduna))
+
+```
+
+```{r}
+
+##3 phc variables  as one
+BaseDat <- transform(BaseDat,phc=ifelse(city==1, phc_kad, ifelse(city==2, phc_kan, ifelse(city==3,phc_zar, NA))))
+
+
+
+# Add labels to City, PHC, and Study Arm
+FollowDat <- transform(FollowDat, phc=ifelse(city==1, phc_kad, ifelse(city==2, phc_kan, ifelse(city==3,phc_zar, NA))))   ###do not use this phc since a lot of missing, use the phc from screening matched the unique_id
+
+#with(FollowDat, table(city, phc_kad)) ## phc_kad =63 in city=1 (Kaduna)??(09/15/2020)
+##add labels to values
+city_labels <- c("Kaduna","Kano","Zaria")
+         
+phc_ordered <- c(11, 12,  13,  14,  21,  22,  23,  31,  32,  33,  34,  41,  42,  43,  44,  51,  52,  53,  54,  61,  62,  63,  64,  71,  72,  73,  74,  81,  82,  83,  91,  92,  93, 101, 102, 103, 104, 105, 111, 112, 113, 114, 121, 122, 131, 132, 133, 134, 141, 142 ,143, 144, 145, 151, 152, 153, 154, 155, 156, 160) ##labels same order
+
+phc_labels <- c("Bakin Ruwa","Gwammaja","Hajia Umma Zaria","Kuma","Sabo Garba","Rijiyar Lemo","Jaba","Gwagwarwa","Hotoro North","Kaura Goje","Tudun Murtala","Guringawa","Turai Yar'adua","Mariri","Panshekara","Gandun Albasa","Unguwar Gini","Sabo Bakin Zuwo","Yakasai Zumunta","Dorayi Karama","Jaen","Gwauran Dutse","Kwamitin Makota", "Mariya Sunusi","Kadawa","Tarda","Rijiyar Zaki","Jaoji","Hausawa","Kauyen Alu","Zakari Isa","Kabala","Unguwar Dosa","Barnawa","Makera","Angwan Sanusi","Kubau Road","Kabala West","Gwada","Farakwai","Kamfani Zango","Birnin Yero","Maraban Rido","Sabon Tasha","Gangara","Giwa","Kaya","Shika","Basawa","Hanwa","Abdukwari","Kwata","Shika Dam","Dambo","Tukur-Tukur","Dutsen Abba","Unguwan Alkali","Badan Dodo","Angwan Bishar","Kudandan")
+
+
+### get phcs in order of city (Kaduna, Kano, Zaria)
+
+phcKaduna <- phc_labels[which(phc_ordered %in% c(91,92,93,101, 102,103,104,105, 111,112,113,114, 121,122,160))]
+
+phcKano <- phc_labels[which(phc_ordered %in% c(11, 12,  13,  14,  21,  22,  23,  31,  32,  33,  34,  41,  42,  43,  44,  51,  52,  53,  54,  61,  62,  63,  64,  71,  72,  73,  74,  81,  82,  83))]
+
+phcZaria <- phc_labels[which(phc_ordered %in% c(131, 132, 133, 134, 141, 142 ,143, 144, 145, 151, 152, 153, 154, 155, 156))]
+
+phcBycity <- c(phc_labels[which(phc_ordered %in% c(91,92,93,101, 102,103,104,105, 111,112,113,114, 121,122,160))], phc_labels[which(phc_ordered %in% c(11, 12,  13,  14,  21,  22,  23,  31,  32,  33,  34,  41,  42,  43,  44,  51,  52,  53,  54,  61,  62,  63,  64,  71,  72,  73,  74,  81,  82,  83))],phc_labels[which(phc_ordered %in% c(131, 132, 133, 134, 141, 142 ,143, 144, 145, 151, 152, 153, 154, 155, 156))])
+
+
+BaseDat <- transform(BaseDat, city=factor(city, labels=city_labels[which(c(1,2,3) %in% unique(BaseDat$city))]),study_arm =factor(study_arm, labels=c("TSC","EUC")), phc=factor(phc, labels=phc_labels[which(phc_ordered%in%sort(unique(BaseDat$phc)))]) )
+
+
+FollowDat <- transform(FollowDat, city=factor(city, labels=city_labels[which(c(1,2,3) %in% unique(FollowDat$city))]), phc=factor(phc, labels=phc_labels[which(phc_ordered%in%sort(unique(FollowDat$phc)))]),study_arm =factor(study_arm, labels=c("TSC","EUC"))  )
+
+#more value labels
+library(Hmisc)
+
+loc_scr_labels <- c("Clinic(PHC)","Community","School")
+gender_p_labels <- c("Female","Male","Other")
+educ_p_labels <- c("No formal education","Primary School","Junior Secondary School","Senior Secondary School","Technical College","College","University" ,"Master Degree","Doctorate Degree")
+
+yes_no_labels <- c("No","Yes")
+
+marital_status_labels <- c("Married Monogamous","Married Polygamous","Single","Divorced","Widow")
+
+ethnicity_labels <- c("Hausa","Fulani","Yoruba","Igbo","Efik","Ibibio","Annang","Ijaw","Urhobo-Isoko","Edo","Itsekiri","Other")
+
+race_labels <- c("Other","Black African")
+
+primary_language_labels <- c("Hausa","Yoruba","Fulfulde","Igbo","English","Other","Fulani")
+
+BaseDat <- transform(BaseDat,loc_scr=factor(loc_scr, labels= loc_scr_labels[which(c(1,2,3) %in% unique(loc_scr))]), gender_p=factor(gender_p, labels=gender_p_labels[which(c(1,2,3) %in% unique(gender_p))]), educ_p=factor(educ_p,labels=educ_p_labels[which(c(0,1:8) %in% unique(educ_p))]), reled_p=factor(reled_p, labels=yes_no_labels[which(c(0,1) %in% unique(reled_p))]), marital_status=factor(marital_status, labels=marital_status_labels[which(c(1:5) %in% unique(marital_status))]),  ethnicity=factor(ethnicity, labels=ethnicity_labels[which(c(1:12) %in% unique(ethnicity))]), race=factor(race, labels=race_labels[which(c(0,1) %in% unique(race))]), primary_language=factor(primary_language, labels=primary_language_labels[which(c(1:7) %in% unique(primary_language))]))
+
+
+gender_labels <- c("Female","Male","Unknown","Unspecified")
+
+grade_labels <- c("Primary School - Year 1","Primary School - Year 2","Primary School - Year 3","Primary School - Year 4","Primary School - Year 5","Primary School - Year 6","Junior Secondary School - Year 1","Junior Secondary School - Year 2","Junior Secondary School - Year 3","Senior Secondary School - Year 1","Senior Secondary School - Year 2","Senior Secondary School - Year 3")
+
+
+BaseDat <- transform(BaseDat, gender=factor(gender, labels=gender_labels[which(c(1:4) %in% unique(gender))]), school=factor(school, labels=yes_no_labels[which(c(0,1) %in% unique(school))]), grade=factor(grade, labels=grade_labels[which(c(1:12) %in% unique(grade))]) )
+
+```
+
+```{r}
+
+# Add the city and CHW ID to all the child screens
+
+BaseDat[is.na(BaseDat[,4]),4] = 0
+FollowDat[is.na(FollowDat[,2]),2] = "diag_enroll"
+
+# Fill in the CHWID, City, and Study Arm
+
+library(tidyr)
+library(tidyverse)
+library(dplyr) 
+
+BaseDat <- BaseDat %>% fill('chwidscr') %>% fill('city') %>% fill('study_arm') %>% fill('phc')
+
+FollowDat <- FollowDat %>% fill('study_arm') %>% fill('city') %>% fill('ev0') %>% fill('phc') %>% fill('chwidfu', .direction = "up") %>% fill('final_form_complete') %>% fill('dob')    
+
+
+BaseDat$issue <- "None"
+FollowDat$issue <- "None"
+
+```
+
+```{r}
+#############################to get matched Mothers and kids data, excluded those not matched #############
+##date is the screening date, dateconsentenroll=date of consent to enroll, each row for one child, scrConsent_complete=screening consent complete, dateassent=date of assent for physical only if age>7.
+
+mothers0<- subset(BaseDat,redcap_event_name=="mother_consent_and_arm_1", select=c(record_id,study_arm, city, phc,chwidscr,gender_p,guard_age,educ_p,reled_p,marital_status,ethnicity,race,primary_language,num_chil,scrConsent_complete,mother_consent_complete))
+
+kids0 <- subset(BaseDat,redcap_event_name=="children_arm_1",select=c(record_id, redcap_repeat_instance, date,dob, age,gender, school, grade,screen_positive, epilepsy_screening_questionnaire_complete, treatedprevious, whentreated, diagepi, assent_and_physical_exam_complete,dateconsentenroll,enroll_consent_assent_and_visit_0_complete, unique_id,dateqolie31,qolie_31_17_v0_complete,dateqolie48,qolie_48_1117_v0_complete,next_step_form_complete))
+
+########re_calculate age instead of using age at screening from REDcap
+
+kids0 <- transform(kids0, age = round(as.numeric(date-dob)/365.25,1))
+##############
+
+kids0$scr_id <- with(kids0, paste(record_id,redcap_repeat_instance,sep="_"))
+
+kids <- subset(kids0, record_id %in% mothers0$record_id)
+
+#mother consent  completed vs. form 
+mothers <- subset(mothers0, record_id %in% kids0$record_id)
+
+###For operational reporting from screening dataset: each row is a child
+scr_rept_dat0 <- merge(mothers, kids, by="record_id", all.y=TRUE) ###all matched mothers and kids, each row is a kid
+
+##only those with scr_complete=1 and mother_consent_complete=2, in other words, consented kids
+scr_rept_dat <- subset(scr_rept_dat0, scrConsent_complete==1&mother_consent_complete==2)
+
+#######those screened positive 
+scr_posi <- subset(scr_rept_dat,epilepsy_screening_questionnaire_complete==2&screen_positive==1)
+scr_posi_ID <- scr_posi$unique_id[!is.na(scr_posi$unique_id)]
+
+### those screened positive, also not missing diagnosis result  or not missing enrolled date, from screening dataset
+physi_enrol_scr <- subset(scr_posi, (!is.na(diagepi))|!is.na(dateconsentenroll), select=c(scr_id, unique_id,city, phc,study_arm, treatedprevious, whentreated,diagepi, assent_and_physical_exam_complete,dateconsentenroll,enroll_consent_assent_and_visit_0_complete)) ##these have diagnosis results or enroll date, included those without unique_ids
+
+matched_follw <- subset(FollowDat, record_id%in% na.omit(BaseDat$unique_id), select=c(record_id,redcap_repeat_instrument, diagepi, treatedprevious, whentreated, assent_and_physical_exam_complete,dateconsentenroll,enroll_consent_assent_and_visit_0_complete, qolie_31_17_v0_m2_m24_complete,qolie_48_1117_v0_m2_m24_complete)) ##city, phc,st
+
+########only those matched to positive and those rows with physical or enroll data
+base_sub_follw1 <- subset(matched_follw, record_id%in% intersect(matched_follw$record_id,scr_posi_ID ) &   (!is.na(diagepi)|!is.na(dateconsentenroll)), select=c(record_id, treatedprevious, whentreated,diagepi, assent_and_physical_exam_complete,dateconsentenroll,enroll_consent_assent_and_visit_0_complete))  ##matched follow up data: either examined=not missing diagnosis or enrolled=not missing enrolled date.
+
+base_sub_follw1$unique_id <-  base_sub_follw1$record_id
+
+##add scr_id, study arm, city and phc onto the follow up using the unique_id
+base_sub_follw1 <- merge(base_sub_follw1, subset(scr_posi, select=c(unique_id, scr_id, city, phc,study_arm)), by="unique_id", all.x=TRUE)
+
+physi_enrol_follow <- subset(base_sub_follw1, select=c(scr_id, unique_id,city, phc,study_arm,treatedprevious, whentreated, diagepi, assent_and_physical_exam_complete,dateconsentenroll,enroll_consent_assent_and_visit_0_complete)) ##only included those matched to screened positive kids
+
+###look at eligibility of those diagnosed
+#with(subset(physi_enrol_scr,diagepi==1), table(treatedprevious, whentreated, useNA="ifany"))
+
+sid.epi.scr.eligi <- na.omit(with(subset(physi_enrol_scr,diagepi==1), scr_id[treatedprevious==0|(treatedprevious==1&whentreated==2)]))
+
+####################save data for later analysis ############
+BaseDat <- transform(BaseDat, age = round(as.numeric(date-dob)/365.25,1))
+BaseDat$scr_id <- with(BaseDat, paste(record_id,redcap_repeat_instance,sep="_"))
+
+#############all screening data and mother data###
+Scr_kidsub <- subset(BaseDat,redcap_event_name=="children_arm_1", select=-c(redcap_event_name, redcap_repeat_instrument,latscr,lonscr,chwidscr,name_chwscr,loc_scr,name_p,cons_sigscrchw,ons_sigscrp,dateconsentscr,scrConsent_complete,address_guard, city,phc_kad,phc_kan,phc_zar,study_arm,gender_p ,parent_dob,guard_age, educ_p,reled_p,marital_status,ethnicity,race,primary_language,num_chil,mother_consent_complete, phc))
+
+# add mother's data
+Mother <- subset(BaseDat, redcap_event_name=="mother_consent_and_arm_1", select=c(record_id, latscr,lonscr,chwidscr,name_chwscr,loc_scr,name_p,cons_sigscrchw,ons_sigscrp,dateconsentscr,scrConsent_complete,address_guard, city,phc,study_arm,gender_p ,parent_dob,guard_age, educ_p,reled_p,marital_status,ethnicity,race,primary_language,num_chil,mother_consent_complete))
+
+##
+scr_dt_all <- merge(Mother, Scr_kidsub, by=c("record_id"), all.x=T,all.y=TRUE)
+
+### about enrolled among those without physical in follow up dataset
+sid.enrol.nophy.folw <- with(subset(physi_enrol_follow, is.na(diagepi)), scr_id[!is.na(dateconsentenroll)])
+####Get the single form data: mother form, physical and EV0####
+
+##mother and screening: variables 1-77 in Scr_enroled_folw
+
+########assent and physical, in screening dataset, weight=weight_w0, in follow up dataset: not_seizure, all missing
+
+assen_physi_scr <- subset(scr_dt_all, !is.na(diagepi)|assent_and_physical_exam_complete==2, select=c( "scr_id","unique_id", names(scr_dt_all)[which(names(scr_dt_all)=="dateassent"):which(names(scr_dt_all)=="assent_and_physical_exam_complete")]))
+
+assent_physi_folw <- subset(FollowDat, !is.na(diagepi)|assent_and_physical_exam_complete==2, select=c("record_id", names(FollowDat)[which(names(FollowDat)=="assent_712_scr"):which(names(FollowDat)=="assent_and_physical_exam_complete")]))
+
+#setdiff(names(assen_physi_scr), names(assent_physi_folw))
+#setdiff( names(assent_physi_folw),names(assen_physi_scr))
+
+assen_physi_scr <- upData(assen_physi_scr,rename=c(Weight="weight_w0"), print=FALSE)
+assent_physi_folw <- upData(assent_physi_folw,rename=c(record_id="unique_id"), print=FALSE)
+
+assent_physi_folw <- merge(assent_physi_folw , subset(scr_dt_all, select=c("scr_id","unique_id")), by="unique_id", all.x=TRUE)
+
+assent_physi <- rbind(assent_physi_folw,assen_physi_scr) ###
+
+assent_physi <- assent_physi[!duplicated(assent_physi),] ##remove any duplicates
+
+##removed those with all missing except for some weired 0's
+a <- apply(assent_physi[, 2:(ncol(assent_physi)-2)], 1, function(x) sum(is.na(x)))
+
+assent_physi <- assent_physi[-which(a==62),] ##removed those only have 0's
+
+###########Enrollment and visit 0, 
+enrol_v0_scr <- subset(scr_dt_all, !is.na(dateconsentenroll), select=c("scr_id",  "unique_id", names(scr_dt_all)[which(names(scr_dt_all)=="cons_sigenrollchw"):which(names(scr_dt_all)=="enroll_consent_assent_and_visit_0_complete")]))
+
+
+enrol_v0_folw <- subset(FollowDat, !is.na(dateconsentenroll),select=c("record_id", names(FollowDat)[which(names(FollowDat)=="cons_sigenrollchw"):which(names(FollowDat)=="enroll_consent_assent_and_visit_0_complete")]))
+
+#setdiff(names(enrol_v0_scr), names(enrol_v0_folw ))
+#setdiff( names(enrol_v0_folw ),names(enrol_v0_scr))
+
+enrol_v0_scr <- upData(enrol_v0_scr,rename=c(aedv0="aed_v0_w0", step_1_dosing_carb_0="step_1_dosing_carb_0_w0",step_1_dosing_valp_0="step_1_dosing_valp_0_w0",step_1_dosing_phen_0="step_1_dosing_phen_0_w0"), print=FALSE)
+
+enrol_v0_folw <- upData(enrol_v0_folw,rename=c(record_id="unique_id", baseline_freq_seizures="basefreq"), print=FALSE)
+
+enrol_v0_folw <- merge(enrol_v0_folw , subset(scr_dt_all, select=c("scr_id","unique_id")), by="unique_id", all.x=TRUE)
+
+enrol_v0 <- rbind(enrol_v0_scr,enrol_v0_folw)  ##
+
+
+### about enrolled
+sid.enrol.eligi.scr <- with(subset(physi_enrol_scr,scr_id%in% sid.epi.scr.eligi), scr_id[!is.na(dateconsentenroll)])
+n.enrol.eligi.scr <- length(sid.enrol.eligi.scr)
+
+phySi_enrol <- merge(assent_physi, subset(enrol_v0,select=-c(unique_id)), by="scr_id", all.x=T, all.y=T)
+
+###look at eligibility among these with epilepsy
+#with(subset(physi_enrol_follow,diagepi==1), table(treatedprevious, whentreated, useNA="ifany"))
+
+sid.epi.folw.eligi <- na.omit(with(subset(physi_enrol_follow,diagepi==1), scr_id[treatedprevious==0|(treatedprevious==1&whentreated==2)]))
+
+### about enrolled among these with epilepsy
+sid.enrol.eligi.folw <- with(subset(physi_enrol_follow,diagepi==1 & scr_id%in% sid.epi.folw.eligi), scr_id[!is.na(dateconsentenroll)])
+
+### check if others enrolled who are  missing diagepi
+sid.enrol.missEpi.scr <- with(subset(physi_enrol_scr, is.na(diagepi) & !is.na(dateconsentenroll)), scr_id)
+
+###valid enrolled sids and non-valid enrolled sids
+
+sid_validEnrolled <- c(sid.enrol.eligi.scr,  sid.enrol.missEpi.scr[sid.enrol.missEpi.scr%in%sid.epi.folw.eligi],sid.enrol.eligi.folw, sid.enrol.nophy.folw[sid.enrol.nophy.folw %in% sid.epi.scr.eligi])
+
+
+valid_phySi_enrol <- subset(phySi_enrol, scr_id %in% sid_validEnrolled)
+
+
+```
+
+Save the data sets to your hard drive.
+
+```{r}
+#Save BaseDat and FollowDat for anytime data update
+save(BaseDat, file = "../data/BaseDat.RDS")
+save(FollowDat, file = "../data/FollowDat.RDS")
+save(scr_dt_all, file="../data/scr_dt_all.RDS") ###all data from screening dataset
+save(valid_phySi_enrol, file="../data/valid_phySi_enrol.RDS")
+
+#Save BaseDat and FollowDat for for weekly update, comment out otherwise
+save(BaseDat, file = "../data/weekly/BaseDat.RDS")
+save(FollowDat, file = "../data/weekly/FollowDat.RDS")
+save(SpecialDat, file = "../data/weekly/SpecialDat.RDS")
+save(AgedDat, file = "../data/weekly/AgedDat.RDS")
+
+# Use this if you want a csv file
+write.csv(BaseDat, "../data/BaseDat.csv", row.names=FALSE)
+write.csv(FollowDat, "../data/FollowDat.csv", row.names=FALSE)
+beep(sound = 9)
+
+```
