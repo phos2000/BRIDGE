@@ -1,0 +1,490 @@
+---
+title: "BRIDGE EQ5D VAS starter"
+date: "`r Sys.Date()`"
+author: "Astrid"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(knitr)
+library(scales)
+library(lubridate)
+library(kableExtra)
+```
+
+## Source Data
+BRIDGE follow-up datasets for all sites.  
+Data in this version was pulled on 8/8/2022 using REDCapDB.Rmd and BRIDGE_DatIn_rename.R.  
+I try to redo every step in Zilu's markdown and compare mine to hers. 
+
+```{r data, echo=FALSE}
+fu <- data.table::fread("../data/FollowDat.csv")
+# bs <- data.table::fread("../data/FollowDat.csv")
+```
+
+## Check N
+For EUC(enhanced usual care): Mine is 893, Zilu's is 890  
+For TSC(intervention arm): Mine is 899, Zilu's is 888  
+
+A good news is that the numbers of unique participants with any follow-up care form records increased(from 98.3% to 99.1%, from 96.2% to 97.3%).  
+
+```{r check, message=FALSE, warning=FALSE}
+
+#unique participants
+tb1 <- fu %>% distinct(study_arm,record_id) %>% count(study_arm) 
+tb1 %>% 
+  kable(caption = "Number of unique participants in follow up dataset") %>% 
+  kable_styling()
+
+tb2 <- fu %>% filter(redcap_repeat_instrument=="follow_up_care_form") %>%
+  distinct(study_arm,record_id) %>% count(study_arm) %>%
+  left_join(tb1 %>% rename(tot=n)) %>% 
+  mutate(pct=percent(n/tot)) 
+tb2 %>% select(-tot) %>% 
+  kable(caption = "Number of unique participants with any follow-up care form records") %>% 
+  kable_styling()
+
+```
+
+
+## TO DO: locate variables that suggest missed visit
+
+```{r miss, eval=FALSE, message=FALSE, warning=FALSE} 
+
+#ZZ: I mute this session currently (eval=FALSE), need to first figure out the list of variables to tell whether it is a missed visit
+
+varl <- c("weight_fu_v2",
+          "confirmseize","seizeclass")
+# "expseiz","treatment")
+
+tb2x <- fu  %>%
+  filter(redcap_repeat_instrument=="follow_up_care_form") %>% 
+  mutate(incomplete=
+           ifelse(follow_up_care_form_complete<2 |
+                    is.na(seizeclass),1,0))
+
+
+#participants do not have any follow up care form records
+tb2x %>%
+  group_by(study_arm) %>% 
+  summarise(n_record=n(),incomplete=sum(incomplete)) %>% ungroup() %>% 
+  mutate(pct=percent(incomplete/n_record)) %>% 
+  kable(caption = "Records flagged as FU care form not complete or missing seizure classification") %>% 
+  kable_styling()
+
+tb2x %>%
+  group_by(study_arm,redcap_repeat_instance) %>% 
+  summarise(n_record=n(),incomplete=sum(incomplete)) %>% ungroup() %>% 
+  mutate(pct=percent(incomplete/n_record)) %>% 
+  kable(caption = "By follow-up visit") %>% 
+  kable_styling()
+
+tb2x %>% filter(redcap_repeat_instrument=="follow_up_care_form",
+                incomplete==1) %>% count(qolie) %>% 
+  kable(caption = "Majority of them has VAS score of 50, currently all non-missing scores are included") %>% 
+  kable_styling()
+#1 with  qolie of 50? should ignore this record? currently included
+#other NAs are not counted anyway
+
+
+
+```
+
+## Not sure about missed_fu variable
+Only the NA part increases extremely(from 9097 to 14131).  
+The variable, missed_fu(Question: If this follow-up was missed, why was it missed?) is not mandatory so many responses are just left blank. 
+
+```{r check2, eval=TRUE, message=FALSE, warning=FALSE} 
+#ZZ: I mute this session currently (eval=FALSE), need to first figure out the list of variables to tell whether it is a missed visit and check missed_fu to see if it is clearly a missed visit as a sanity check.
+
+#missed_fu var
+tb3 <- fu %>% 
+  filter(redcap_repeat_instrument=="follow_up_care_form",
+         follow_up_care_form_complete==2) %>% 
+  group_by(missed_fu) %>% 
+  summarise(mean_qolie=mean(as.integer(qolie),na.rm = T),freq=n()) %>% 
+  arrange(desc(freq)) 
+
+tb3 %>% kable(caption = "missed_fu should indicate if this follow-up was missed and why",
+              format = "html") %>% kable_styling() %>% 
+  scroll_box(width = "90%",height = "400px")
+
+# fu %>% 
+#   filter(redcap_repeat_instrument=="follow_up_care_form",
+#          follow_up_care_form_complete==2) %>% nrow()
+# 8304/9139 is NA
+
+```
+
+
+## Check number of visits
+Participants contribute different number of follow-up visit records.  
+
+Note: Each digit means one instance for follow up care form. So "11111111" means the participant contributes 8 visits (instance 1-8).  
+
+Now the majority is 11111111(seems like most of them have finished the 8 visits). 
+
+```{r visit, echo=FALSE, message=FALSE,fig.width=12, warning=FALSE}
+#check number of visits
+fuw <- fu  %>% filter(redcap_repeat_instrument=="follow_up_care_form") %>% 
+  select(record_id,visit=redcap_repeat_instance,study_arm) %>% mutate(value=1) %>% 
+  pivot_wider(names_from = visit, names_prefix = "v", values_from = value) %>% 
+  replace_na(list(v1=0,v2=0,v3=0,v4=0,v5=0,v6=0,v7=0,v8=0)) %>% 
+  unite("fu_pattern",v1:v8,sep = "",remove = F) 
+
+#unique missing pattern
+fuwp <- fuw %>% count(study_arm,fu_pattern) %>% 
+  group_by(study_arm) %>% 
+  mutate(tot=sum(n)) %>% 
+  ungroup() %>% 
+  mutate(pct=n/tot,
+         lbl=paste0(n," (",percent(pct,accuracy = 0.1),")"))
+
+ggplot(data=fuwp,aes(x=fu_pattern,y=n)) + 
+  geom_bar(stat="identity") + 
+  geom_text(aes(label=lbl),nudge_y = 40) +
+  ylim(c(0,max(fuwp$n)+55)) +
+  ylab("Number of participants") +
+  xlab("Follow-up visit pattern") + 
+  coord_flip() +
+  facet_wrap(~study_arm) +
+  theme_minimal() +
+  ggtitle("Follow-up visit records pattern (excluding incomplete forms)")
+
+
+#investigate
+tc <- fuw %>% filter(v1==0)
+raw <- tc %>% left_join(fu) #%>% select(record_id,starts_with("red"),city,study_arm)
+raw %>% distinct(city,study_arm,record_id) %>% count(city,study_arm) %>% 
+  kable(caption="Missing follow-up visit 1") %>% 
+  kable_styling() #two sites
+
+```
+
+The number of patients missing the first visit decreased, which is puzzling -- maybe they gave a made-up for the form. 
+
+
+## Calculating EQ5D VAS scores (including zero score)
+Based on the codes, I think the VAS scores are obtained from the follow up care form. Is it a visual evaluation version of EQ-5D, as it doesn't look like to the original self-report EQ-5Q?
+
+```{r calc0, echo=FALSE, message=FALSE, warning=FALSE}
+#divide
+tsc <- fu %>% filter(redcap_repeat_instrument=="follow_up_care_form") %>% 
+  filter(study_arm=="TSC") %>% 
+  mutate(q=as.integer(qolie),q2=ifelse(is.na(q),-9,q)) 
+
+euc <- fu %>% filter(redcap_repeat_instrument=="follow_up_care_form") %>% 
+  filter(study_arm=="EUC") %>%  
+  mutate(q=as.integer(qolie),q2=ifelse(is.na(q),-9,q)) 
+
+
+# add plot distribution
+# summary(tsc$q)
+# summary(euc$q)
+
+bind_rows(tsc,euc) %>%  
+  ggplot(aes(x=q2)) + 
+  geom_histogram(binwidth = 2) +
+  facet_grid(study_arm~.) +
+  theme_minimal() +
+  xlab("VAS") + ylab("Freq") +
+  ggtitle("Distribution of valid scores (below 0 indicating NA)")
+
+```
+
+* Compared to Zilu's, there's a significantly higher bar for VAS = 100 in the TSC arm. Looks consistent with the expected effect of our intervention.  
+
+
+Summary Tables  
+
+1. **Average score per patient**  
+
+NA ignored, averaging all fu visits at patient level (including zero)
+Only count patients with at least one valid score.   
+
+```{r calc1, echo=FALSE, message=FALSE, warning=FALSE}
+
+#### VAS full ####
+full <- list()
+full$tsc <- tsc %>%
+  group_by(record_id) %>% 
+  summarise(mean_quolie=mean(q,na.rm = T)) %>% 
+  ungroup() 
+full$euc <- euc %>% 
+  group_by(record_id) %>% 
+  summarise(mean_quolie=mean(q,na.rm = T)) %>% 
+  ungroup() 
+# map(full,~summary(.x$mean_quolie))
+s1 <- map_dbl(full,~sum(.x$mean_quolie,na.rm = T))
+s2 <- map_dbl(full,~(.x %>% filter(mean_quolie>=0) %>% distinct(record_id) %>% nrow()))
+o1 <- data.frame(item="Average score per patient",
+                 TSC_total=s1["tsc"] %>% unname(),
+                 TSC_N=s2["tsc"] %>% unname(),
+                 EUC_total=s1["euc"] %>% unname(),
+                 EUC_N=s2["euc"] %>% unname(),
+                 stringsAsFactors = F) %>% 
+  mutate(TSC_per_patient=TSC_total/TSC_N,
+         EUC_per_patient=EUC_total/EUC_N,
+         diff=TSC_per_patient-EUC_per_patient) %>% 
+  relocate(item,starts_with("tsc"),starts_with("euc"))
+
+o1 %>% kable(caption = "EQ5D VAS") %>% 
+  kable_styling()
+
+```
+
+
+
+2. **Split by follow-up visit**  
+
+One patient only has one record for each visit, so no scores are averaged.  
+
+```{r calc2, echo=FALSE, message=FALSE, warning=FALSE}
+#### by visit ####t2 <- bm2 %>% 
+
+bv <- list()
+bv$tsc <- tsc %>% filter(q>=0) 
+bv$euc <- euc %>% filter(q>=0)  
+# map(bv,~summary(.x$q))
+# map(bv,~summary(.x$q))
+s1x <- map(bv,~(
+  .x %>% group_by(redcap_repeat_instance) %>% summarise(tot=sum(q,na.rm = T)) 
+)) %>% bind_rows(.id="study_arm")
+s2x <- map(bv,~(.x %>% distinct(redcap_repeat_instance,record_id) %>% count(redcap_repeat_instance))) %>% bind_rows(.id="study_arm")
+
+o2 <- full_join(s1x,s2x) %>% 
+  mutate(per_patient=tot/n) %>% 
+  pivot_wider(names_from = study_arm,values_from = tot:per_patient) %>% 
+  select(visit=redcap_repeat_instance,
+         TSC_total=tot_tsc,
+         TSC_N=n_tsc,
+         TSC_per_patient=per_patient_tsc,
+         EUC_total=tot_euc,
+         EUC_N=n_euc,
+         EUC_per_patient=per_patient_euc
+  ) %>% 
+  mutate(diff=TSC_per_patient-EUC_per_patient)
+
+
+
+o2 %>% kable(caption = "EQ5D VAS Split up follow-up") %>% 
+  kable_styling()
+```
+
+
+3. **By visit - gender**  
+
+There is one unspecified gender value in EUC, excluded for now.  
+
+
+```{r calc3, echo=FALSE, message=FALSE,warning=F}
+#### by gender, visit ####
+
+#fill gender for all records
+# fu %>% count(study_arm,gender) 
+#there is one unspecified gender (exclude?)
+ex1 <- fu %>% filter(!is.na(gender),gender>2) 
+gd <- fu %>% filter(!is.na(gender)) %>% distinct(record_id,gender,study_arm) 
+bg <- list()
+bg$tsc <- tsc %>% filter(q>=0) %>% select(-gender) %>% left_join(gd) 
+bg$euc <- euc %>% filter(q>=0) %>% select(-gender) %>% left_join(gd)
+# map(bg,~summary(.x$q))
+# map(bg,~summary(.x$gender))
+s1y <- map(bg,~(
+  .x %>% filter(gender==1 | gender==2) %>% 
+    group_by(gender,redcap_repeat_instance) %>% summarise(tot=sum(q,na.rm = T)) 
+)) %>% bind_rows(.id="study_arm")
+s2y <- map(bg,~(.x %>% filter(gender==1 | gender==2) %>% 
+                  distinct(gender, redcap_repeat_instance,record_id) %>% 
+                  count(gender,redcap_repeat_instance))) %>% bind_rows(.id="study_arm")
+
+o3 <- full_join(s1y,s2y) %>% 
+  mutate(per_patient=tot/n) %>% 
+  pivot_wider(names_from = study_arm,values_from = tot:per_patient) %>% 
+  select(gender,visit=redcap_repeat_instance,
+         TSC_total=tot_tsc,
+         TSC_N=n_tsc,
+         TSC_per_patient=per_patient_tsc,
+         EUC_total=tot_euc,
+         EUC_N=n_euc,
+         EUC_per_patient=per_patient_euc
+  ) %>% 
+  mutate(diff=TSC_per_patient-EUC_per_patient) %>% 
+  arrange(desc(gender),visit) %>% 
+  mutate(gender=factor(gender,levels=1:2,labels=c("Female","Male")))
+
+o3 %>% kable(caption = "EQ5D VAS Split up follow-up and gender") %>% 
+  kable_styling()
+```
+
+## Exploring intervals between follow-up visits 
+Still mostly conformed with scheduled time. 
+
+
+**Expected schedule of follow-up visits**
+Only the first follow-up needs to be +/- 3 days, all else allow +/- 14 days.  
+*Schedule:*  
+* instance 1 - Week 1    
+* instance 2 - Month 1   
+* instance 3 - Month 2   
+* instance 4 - Month 4  
+* instance 5 - Month 6  
+* instance 6 - Month 9  
+* instance 7 - Month 12  
+* instance 8 - Month 15  
+* instance 9 - Month 18  
+* instance 10 - Month 24   
+*Expected time interval:*  
+* v1: 7 +/- 3 from v0   
+* v2: 28 +/- 14 from v0  
+* v3: 28 +/- 14 from v2  
+* v4: 56 +/- 14 from v3  
+* v5: 56 +/- 14 from v4  
+* v6: 84 +/- 14 from v5  
+* v7: 84 +/- 14 from v6  
+* v8: 84 +/- 14 from v7   
+* v9: 84 +/- 14 from v8   
+* v10: 168 +/- 14 from v9?     
+
+
+
+```{r int, echo=FALSE, message=FALSE,warning=F}
+#get baseline date and age
+tt <- fu %>% filter(redcap_repeat_instrument=="diag_enroll") %>% 
+  mutate(de_screen=as_date(date_of_consent_screen),
+         de_fu=as_date(dateconsentenroll)) %>% 
+  mutate(m1=as.integer(is.na(de_screen)),m2=as.integer(is.na(de_fu))) %>% 
+  mutate(date_baseline=as_date(ifelse(ev0==1,de_screen,de_fu)),
+         agefu=age)
+
+# tt %>% select(starts_with("de_"),date_baseline) %>% summary()
+# 
+# tt %>% mutate(dd=de_fu-de_screen) %>% pull(dd) %>% as.numeric() %>% summary()
+
+# fub <- fu %>% filter(redcap_repeat_instrument=="diag_enroll") %>% 
+#   select(record_id,study_arm,starts_with("date")) %>% 
+#   mutate_at(vars(starts_with("date")),as_date)
+# # datefu
+# # dateassentenroll, dataconsentenroll, which date used as baseline
+# fub %>% select(starts_with("date")) %>% summary() 
+# print("Not sure which date to use as baseline, missingness could be an issue")
+
+#check date of fu
+fud <- fu  %>% filter(redcap_repeat_instrument=="follow_up_care_form") %>% 
+  select(record_id,visit=redcap_repeat_instance,study_arm,datefu,agefu) %>% 
+  mutate(date=as_date(datefu)) %>% 
+  bind_rows(tt %>% rename(date=date_baseline) %>% select(record_id,study_arm,date,agefu) %>% mutate(visit=0))
+#fu record missing date
+fud %>% filter(is.na(date),visit>0) %>% count(study_arm,visit) %>% 
+  kable(caption="number of records missing follow-up date") %>% 
+  kable_styling()
+
+fudw <- fud %>% select(-datefu) %>% rename(age=agefu) %>% 
+  pivot_wider(names_from = visit,
+              values_from = c(date,age)) %>% 
+  mutate(d01=as.integer(date_1-date_0),
+         d12=as.integer(date_2-date_1),
+         d23=as.integer(date_3-date_2),
+         d34=as.integer(date_4-date_3),
+         d45=as.integer(date_5-date_4),
+         d56=as.integer(date_6-date_5),
+         d67=as.integer(date_7-date_6),
+         d78=as.integer(date_8-date_7))
+
+save(fudw,file="fcf_dates_wide.rda")
+
+cat("In the following table, column d01 describes time interval between baseline and the first follow-up vist; d12 describes time interval between 1st and 2nd visit.\n")
+
+fudw %>% filter(study_arm=="EUC") %>% 
+  select(starts_with("d")) %>% 
+  select(-starts_with("date")) %>% 
+  summary() %>% kable(caption="Range of intervals between follow up visits, EUC")  %>%
+  kable_styling()
+fudw %>% filter(study_arm=="TSC") %>% 
+  select(starts_with("d")) %>% 
+  select(-starts_with("date")) %>% 
+  summary() %>% kable(caption="Range of intervals between follow up visits, TSC")  %>%
+  kable_styling()
+
+
+
+```
+
+
+For every visit:
+
+```{r int2, echo=FALSE, message=FALSE,warning=F}
+pf <- function(v,m,t) {
+  vv <- enquo(v)
+  m1 <- fudw %>% pull(!!vv) %>% min(na.rm = T)
+  m2 <- fudw %>% pull(!!vv) %>% max(na.rm = T)
+  
+  p <- fudw %>% ggplot(aes(x=study_arm,y=!!vv)) +
+    geom_boxplot() +
+    scale_y_continuous(breaks = c(m1,-100,0,m,100,m2))  +
+    coord_flip() + theme_minimal() +
+    ggtitle(t)
+  print(p)
+}
+
+pf(d01,7,"Baseline-FU1: expected 1 week")
+pf(d12,21,"FU1-FU2: expected 3 weeks")
+pf(d23,28,"FU2-FU3: expected 4 weeks")
+pf(d34,56,"FU3-FU4: expected 8 weeks")
+pf(d45,56,"FU4-FU5: expected 8 weeks")
+pf(d56,84,"FU5-FU6: expected 12 weeks")
+pf(d67,84,"FU6-FU7: expected 12 weeks")
+pf(d78,84,"FU7-FU8: expected 12 weeks")
+```
+
+
+**Check time interval exclusions **   
+## TODO: apply time interval exclusion    
+
+
+## Missing VAS score (Updated on Aug 12)
+
+The table below describes missing (NA) EQ5D VAS scores in all follow-up care form records. Missing score affects less than 1% of all records(also less than Zilu's calculation. EUC from 0.59% to 0.40%, TSC from 0.83% to 0.65%). 
+
+```{r int missing, echo=FALSE, message=FALSE,warning=F}
+cm <- fu %>% filter(redcap_repeat_instrument=="follow_up_care_form") %>% 
+  mutate(q=as.integer(qolie),miss=ifelse(is.na(q),1,0)) 
+
+t1 <- cm %>% group_by(study_arm) %>% 
+  summarise(tot_record=n(),miss_record=sum(miss),
+            tot_headcount=n_distinct(record_id)) 
+t2 <- cm %>% filter(miss==1) %>% group_by(study_arm) %>% 
+  summarise(anymiss_headcount=n_distinct(record_id))
+mh <- cm %>% filter(miss==1) %>% pull(record_id) %>% unique()
+t3 <- cm %>% filter(record_id %in% mh) %>% 
+  group_by(study_arm,record_id) %>% summarise(nms=sum(!is.na(q))) %>% 
+  filter(nms==0) %>% 
+  group_by(study_arm) %>% 
+  summarise(lost_headcount=n()) 
+
+full_join(t1,t2) %>% full_join(t3) %>% replace_na(list(lost_headcount=0)) %>% 
+  mutate(pct_miss_record=percent(miss_record/tot_record),
+         pct_anymiss_headcount=percent(anymiss_headcount/tot_headcount)) %>% 
+  select(study_arm,contains("record"),contains("headcount")) %>% 
+  kable(caption = "Missing EQ5D VAS scores") %>% 
+  kable_styling()
+
+
+cm %>% group_by(study_arm,redcap_repeat_instance) %>% 
+  summarise(tot_record=n(),miss_record=sum(miss)) %>% 
+  mutate(pct_miss_record=percent(miss_record/tot_record)) %>% 
+  kable(caption = "Missing EQ5D VAS scores, by visit") %>% 
+  kable_styling()
+
+
+ck <- cm %>% filter(record_id %in% mh) %>% 
+  group_by(study_arm,record_id) %>% summarise(nms=sum(!is.na(q))) %>% 
+  filter(nms==0) %>% pull(record_id)
+# cm %>% filter(record_id %in% ck) %>% View()
+
+```
