@@ -28,9 +28,11 @@ fu <- data.table::fread("../data/FollowDat.csv")
 ```
 
 ## Check N
+*use record_id to locate the number of responses.*  
 For EUC(enhanced usual care): Mine is 893, Zilu's is 890  
 For TSC(intervention arm): Mine is 899, Zilu's is 888  
 
+*we more focus on the follow-up-care form*  
 A good news is that the numbers of unique participants with any follow-up care form records increased(from 98.3% to 99.1%, from 96.2% to 97.3%).  
 
 ```{r check, message=FALSE, warning=FALSE}
@@ -52,29 +54,43 @@ tb2 %>% select(-tot) %>%
 ```
 
 
-## TO DO: locate variables that suggest missed visit
+## locate variables that suggest missed visit
+0. follow_up_care_form_complete  
+1. diagnosis_of_seizures_v2 = "confirmseize"  
+2. weight_fu_v2
 
-```{r miss, eval=FALSE, message=FALSE, warning=FALSE} 
-
-#ZZ: I mute this session currently (eval=FALSE), need to first figure out the list of variables to tell whether it is a missed visit
+```{r miss, eval=TRUE, message=FALSE, warning=FALSE} 
 
 varl <- c("weight_fu_v2",
-          "confirmseize","seizeclass")
-# "expseiz","treatment")
+          "confirmseize")
 
+# "seizeclass","expseiz","treatment")
+
+# build a new dataset tb2x
+# if follow-up-care form complete index != 2 or any one in the varl is NA
 tb2x <- fu  %>%
   filter(redcap_repeat_instrument=="follow_up_care_form") %>% 
   mutate(incomplete=
-           ifelse(follow_up_care_form_complete<2 |
-                    is.na(seizeclass),1,0))
+           ifelse(follow_up_care_form_complete<2 | is.na(confirmseize) | is.na(weight_fu_v2) | is.na(seizeclass) | is.na(qolie) | is.na(psych_v2),1,0))
 
+# follow_up_care_form_complete,seizeclass makes less sense
+# confirmseize, 2.23%, 2.05%
+# confirmseize + weight_fu_v2, 2.56%, 2.11%
+# only weight_fu_v2, 2.53%, 2.07%
+# expsize/weight, 100%(wrong), 3%
+# add temp_v2, 2.67%, 2.19%
+# add dev_regression_v2, 2.76%, 2.22%
+# add qolie, 2.95%, 2.50%
+# still not sensitive enough
+# seizures_after_aed_euc_v2 = "seizaftaed",frequency_change_euc_v2 = "deltafreq", only remove the NAs
+# I need to find one necessary but not must provided value: so it is NA when missed. 
 
 #participants do not have any follow up care form records
 tb2x %>%
   group_by(study_arm) %>% 
   summarise(n_record=n(),incomplete=sum(incomplete)) %>% ungroup() %>% 
   mutate(pct=percent(incomplete/n_record)) %>% 
-  kable(caption = "Records flagged as FU care form not complete or missing seizure classification") %>% 
+  kable(caption = "Records flagged as FU care form not complete or missing seizure diagnoisis or missing weights") %>% 
   kable_styling()
 
 tb2x %>%
@@ -89,9 +105,15 @@ tb2x %>% filter(redcap_repeat_instrument=="follow_up_care_form",
   kable(caption = "Majority of them has VAS score of 50, currently all non-missing scores are included") %>% 
   kable_styling()
 #1 with  qolie of 50? should ignore this record? currently included
-#other NAs are not counted anyway
+#NAs are not counted anyway, the number of NAs are less than qolie or 50
 
-
+# the pct of incomplete in all qolie of 50
+tb2x %>% filter(redcap_repeat_instrument=="follow_up_care_form", qolie == 50) %>%
+  group_by(study_arm,redcap_repeat_instance) %>%
+  summarise(n_record=n(),incomplete_num=sum(incomplete)) %>% ungroup() %>%
+  mutate(pct = percent(incomplete_num / n_record)) %>%
+  kable(caption = "is Qolie of 50 a meaningful index for missing data?") %>%
+  kable_styling()
 
 ```
 
@@ -100,7 +122,6 @@ Only the NA part increases extremely(from 9097 to 14131).
 The variable, missed_fu(Question: If this follow-up was missed, why was it missed?) is not mandatory so many responses are just left blank. 
 
 ```{r check2, eval=TRUE, message=FALSE, warning=FALSE} 
-#ZZ: I mute this session currently (eval=FALSE), need to first figure out the list of variables to tell whether it is a missed visit and check missed_fu to see if it is clearly a missed visit as a sanity check.
 
 #missed_fu var
 tb3 <- fu %>% 
@@ -119,7 +140,84 @@ tb3 %>% kable(caption = "missed_fu should indicate if this follow-up was missed 
 #          follow_up_care_form_complete==2) %>% nrow()
 # 8304/9139 is NA
 
+tb2x %>%
+  group_by(incomplete, missed_fu) %>%
+  summarise(mean_qolie=mean(as.integer(qolie),na.rm = T),freq=n()) %>% 
+  arrange(incomplete, desc(freq)) %>%
+  kable(caption = "recheck incomplete reasons",
+              format = "html") %>% kable_styling() %>% 
+  scroll_box(width = "90%",height = "400px")
+
+# there're still some missing cases using the weight and seizure(sensitivity is low lol). 
+# sometimes visit done but they use this question as a remark. 
 ```
+
+Which index is the best index? using the missed_fu as a reference
+
+```{r check3, eval=TRUE, message=FALSE, warning=FALSE} 
+# set a few answers as the complete cases
+# missed = ifelse(missed_fu %in% c("No", "No missed", "None", "N0", "Not missed", "NO", "No miss", "No messing", "No missen", "0", "On time") | str_detect(missed_fu, "Visit done") | str_detect(missed_fu, "Visit Done") | (is.na(missed_fu) & incomplete == 0), 0, 1)
+
+# actually for the missing cases told by the missed_fu, we can just use regularization. We're trying to find an index for missed_fu == NA -- you can say what kind of mixing is acceptable for you. 
+# Another way is to Bayes. 
+
+# if all missed_fu == NA (idealized)
+tb2x %>%
+  mutate(missed = ifelse(missed_fu %in% c("No", "No missed", "None", "N0", "Not missed", "NO", "No miss", "No messing", "No missen", "0", "On time") | str_detect(missed_fu, "Visit done") | str_detect(missed_fu, "Visit Done") | is.na(missed_fu), 0, 1)) %>%
+  group_by(study_arm) %>% 
+  summarise(n_record=n(),incomplete_num=sum(missed)) %>% ungroup() %>% 
+  mutate(pct=percent(incomplete_num/n_record)) %>% 
+  kable(caption = "Missing Rate in 2 arms") %>% 
+  kable_styling()
+
+tb2x %>%
+  mutate(missed = ifelse(missed_fu %in% c("No", "No missed", "None", "N0", "Not missed", "NO", "No miss", "No messing", "No missen", "0", "On time") | str_detect(missed_fu, "Visit done") | str_detect(missed_fu, "Visit Done") | is.na(missed_fu), 0, 1)) %>%
+  group_by(study_arm,redcap_repeat_instance) %>% 
+  summarise(n_record=n(),incomplete_num=sum(missed)) %>% ungroup() %>% 
+  mutate(pct=percent(incomplete_num/n_record)) %>% 
+  kable(caption = "Missing rate among all") %>% 
+  kable_styling()
+
+
+# only those missed_fu == NA and have the important values(qolie, weight, seizure_dx, seizure_class) are accepted as existing cases
+# maybe still idealized, but we have no evidence to prove they are not. 
+## visit done is not a enough answer and causes conflicts sometimes. Visit done may be made up later(delay), but this one is missed. 
+# how many kids have several records for the same instance
+tb2y = tb2x %>%
+  filter(redcap_repeat_instrument=="follow_up_care_form") %>% 
+  mutate(missed = ifelse(missed_fu %in% c("No", "No missed", "None", "N0", "Not missed", "NO", "No miss", "No messing", "No missen", "0", "On time") | ((str_detect(missed_fu, "Visit done") | str_detect(missed_fu, "Visit Done") | is.na(missed_fu)) & incomplete == 0), 0, 1))
+
+tb2y %>%
+  group_by(study_arm) %>% 
+  summarise(n_record=n(),incomplete_num=sum(missed)) %>% ungroup() %>% 
+  mutate(pct=percent(incomplete_num/n_record)) %>% 
+  kable(caption = "More Strict: Missing Rate in 2 arms") %>% 
+  kable_styling()
+
+tb2y %>%
+  group_by(study_arm,redcap_repeat_instance) %>% 
+  summarise(n_record=n(),incomplete_num=sum(missed)) %>% ungroup() %>% 
+  mutate(pct=percent(incomplete_num/n_record)) %>% 
+  kable(caption = "More Strict: Missing rate among all") %>% 
+  kable_styling()
+```
+
+```{r}
+## category 1: "Visit done" but incomplete == 1, need to explore the instances: whether repeat
+tb2y[77] %>%
+  kable() %>%
+  kable_styling()
+
+## category 2: "Visit done" while incomplete == 0, need to check whether they make up in this time.
+## I think they are indeed missing ... so visit done is still some dirty data. 
+tb2y %>%
+  filter((str_detect(missed_fu, "Visit done") | str_detect(missed_fu, "Visit Done")) & incomplete == 0) %>%
+  kable() %>%
+  kable_styling()
+
+```
+
+
 
 
 ## Check number of visits
