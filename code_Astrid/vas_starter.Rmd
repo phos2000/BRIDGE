@@ -18,9 +18,7 @@ library(kableExtra)
 ```
 
 ## Source Data
-BRIDGE follow-up datasets for all sites.  
-Data in this version was pulled on 8/8/2022 using REDCapDB.Rmd and BRIDGE_DatIn_rename.R.  
-I try to redo every step in Zilu's markdown and compare mine to hers. 
+Data in this version of output was pulled on 8/8/2022 using REDCapDB.Rmd and BRIDGE_DatIn_rename.R.  
 
 ```{r data, echo=FALSE}
 fu <- data.table::fread("../data/FollowDat.csv")
@@ -29,11 +27,7 @@ fu <- data.table::fread("../data/FollowDat.csv")
 
 ## Check N
 *use record_id to locate the number of responses.*  
-For EUC(enhanced usual care): Mine is 893, Zilu's is 890  
-For TSC(intervention arm): Mine is 899, Zilu's is 888  
-
-*we more focus on the follow-up-care form*  
-A good news is that the numbers of unique participants with any follow-up care form records increased(from 98.3% to 99.1%, from 96.2% to 97.3%).  
+As we focus on the follow-up care form, we also check that.
 
 ```{r check, message=FALSE, warning=FALSE}
 
@@ -55,9 +49,12 @@ tb2 %>% select(-tot) %>%
 
 
 ## locate variables that suggest missed visit
-0. follow_up_care_form_complete  
-1. diagnosis_of_seizures_v2 = "confirmseize"  
-2. weight_fu_v2
+0. follow_up_care_form_complete: do no help much.  
+1. diagnosis_of_seizures_v2(variable name: confirmseize)   
+2. weight_fu_v2  
+3. confirm_seizure_class_v2(variable name: seizeclass)
+4. added_question_for_fup(variable name: qolie): which is the VAS question
+5. psych_v2: can only be measured at the scene theoretically
 
 ```{r miss, eval=TRUE, message=FALSE, warning=FALSE} 
 
@@ -98,12 +95,13 @@ tb2x %>%
   summarise(n_record=n(),incomplete=sum(incomplete)) %>% ungroup() %>% 
   mutate(pct=percent(incomplete/n_record)) %>% 
   kable(caption = "By follow-up visit") %>% 
-  kable_styling()
+  kable_styling() %>% 
+  scroll_box(width = "90%",height = "400px")
 
-tb2x %>% filter(redcap_repeat_instrument=="follow_up_care_form",
-                incomplete==1) %>% count(qolie) %>% 
-  kable(caption = "Majority of them has VAS score of 50, currently all non-missing scores are included") %>% 
-  kable_styling()
+# tb2x %>% filter(redcap_repeat_instrument=="follow_up_care_form",
+                # incomplete==1) %>% count(qolie) %>% 
+  # kable(caption = "Majority of them has VAS score of 50, currently all non-missing scores are included") %>% 
+  # kable_styling()
 #1 with  qolie of 50? should ignore this record? currently included
 #NAs are not counted anyway, the number of NAs are less than qolie or 50
 
@@ -112,14 +110,13 @@ tb2x %>% filter(redcap_repeat_instrument=="follow_up_care_form", qolie == 50) %>
   group_by(study_arm,redcap_repeat_instance) %>%
   summarise(n_record=n(),incomplete_num=sum(incomplete)) %>% ungroup() %>%
   mutate(pct = percent(incomplete_num / n_record)) %>%
-  kable(caption = "is Qolie of 50 a meaningful index for missing data?") %>%
-  kable_styling()
+  kable(caption = "is Qolie of 50 a meaningful index for missing data? Maybe not so good") %>%
+  kable_styling() %>% 
+  scroll_box(width = "90%",height = "400px")
 
 ```
 
-## Not sure about missed_fu variable
-Only the NA part increases extremely(from 9097 to 14131).  
-The variable, missed_fu(Question: If this follow-up was missed, why was it missed?) is not mandatory so many responses are just left blank. 
+## the most reliable index for missing data: missed_fu variable
 
 ```{r check2, eval=TRUE, message=FALSE, warning=FALSE} 
 
@@ -152,7 +149,23 @@ tb2x %>%
 # sometimes visit done but they use this question as a remark. 
 ```
 
-Which index is the best index? using the missed_fu as a reference
+
+I found some responses meaning not missing, and I picked them out:  
+
+- "No",  
+- "No missed",  
+- "None",  
+- "N0",  
+- "Not missed",  
+- "NO",  
+- "No miss",  
+- "No messing",  
+- "No missen",  
+- "0",  
+- "On time"  
+
+For the NA(blank answers), we have no reasons to set them all as missing(Impossible with such a big number) or not missing(if they're just incomplete?).  
+I use the important indices below to distinguish whether the NAs are missing or not. 
 
 ```{r check3, eval=TRUE, message=FALSE, warning=FALSE} 
 # set a few answers as the complete cases
@@ -162,24 +175,24 @@ Which index is the best index? using the missed_fu as a reference
 # Another way is to Bayes. 
 
 # if all missed_fu == NA (idealized)
-tb2x %>%
-  mutate(missed = ifelse(missed_fu %in% c("No", "No missed", "None", "N0", "Not missed", "NO", "No miss", "No messing", "No missen", "0", "On time") | str_detect(missed_fu, "Visit done") | str_detect(missed_fu, "Visit Done") | is.na(missed_fu), 0, 1)) %>%
-  group_by(study_arm) %>% 
-  summarise(n_record=n(),incomplete_num=sum(missed)) %>% ungroup() %>% 
-  mutate(pct=percent(incomplete_num/n_record)) %>% 
-  kable(caption = "Missing Rate in 2 arms") %>% 
-  kable_styling()
+# tb2x %>%
+#  mutate(missed = ifelse(missed_fu %in% c("No", "No missed", "None", "N0", "Not missed", "NO", "No miss", "No messing", "No missen", "0", "On time") | str_detect(missed_fu, "Visit done") | str_detect(missed_fu, "Visit Done") | is.na(missed_fu), 0, 1)) %>%
+#  group_by(study_arm) %>% 
+#  summarise(n_record=n(),incomplete_num=sum(missed)) %>% ungroup() %>% 
+#  mutate(pct=percent(incomplete_num/n_record)) %>% 
+#  kable(caption = "Missing Rate in 2 arms") %>% 
+#  kable_styling()
 
-tb2x %>%
-  mutate(missed = ifelse(missed_fu %in% c("No", "No missed", "None", "N0", "Not missed", "NO", "No miss", "No messing", "No missen", "0", "On time") | str_detect(missed_fu, "Visit done") | str_detect(missed_fu, "Visit Done") | is.na(missed_fu), 0, 1)) %>%
-  group_by(study_arm,redcap_repeat_instance) %>% 
-  summarise(n_record=n(),incomplete_num=sum(missed)) %>% ungroup() %>% 
-  mutate(pct=percent(incomplete_num/n_record)) %>% 
-  kable(caption = "Missing rate among all") %>% 
-  kable_styling()
+#tb2x %>%
+#  mutate(missed = ifelse(missed_fu %in% c("No", "No missed", "None", "N0", "Not missed", "NO", "No miss", "No messing", "No missen", "0", "On time") | str_detect(missed_fu, "Visit done") | str_detect(missed_fu, "Visit Done") | is.na(missed_fu), 0, 1)) %>%
+#  group_by(study_arm,redcap_repeat_instance) %>% 
+#  summarise(n_record=n(),incomplete_num=sum(missed)) %>% ungroup() %>% 
+#  mutate(pct=percent(incomplete_num/n_record)) %>% 
+#  kable(caption = "Missing rate among all") %>% 
+#  kable_styling()
 
 
-# only those missed_fu == NA and have the important values(qolie, weight, seizure_dx, seizure_class) are accepted as existing cases
+# only those missed_fu == NA and have the important values(qolie, weight, seizure_dx, seizure_class, psych) are accepted as existing cases
 # maybe still idealized, but we have no evidence to prove they are not. 
 ## visit done is not a enough answer and causes conflicts sometimes. Visit done may be made up later(delay), but this one is missed. 
 # how many kids have several records for the same instance
@@ -191,29 +204,39 @@ tb2y %>%
   group_by(study_arm) %>% 
   summarise(n_record=n(),incomplete_num=sum(missed)) %>% ungroup() %>% 
   mutate(pct=percent(incomplete_num/n_record)) %>% 
-  kable(caption = "More Strict: Missing Rate in 2 arms") %>% 
+  kable(caption = "Missing Rate in 2 arms respectively") %>% 
   kable_styling()
 
 tb2y %>%
   group_by(study_arm,redcap_repeat_instance) %>% 
   summarise(n_record=n(),incomplete_num=sum(missed)) %>% ungroup() %>% 
   mutate(pct=percent(incomplete_num/n_record)) %>% 
-  kable(caption = "More Strict: Missing rate among all") %>% 
-  kable_styling()
+  kable(caption = "Missing rate among all") %>% 
+  kable_styling() %>% 
+  scroll_box(width = "90%",height = "400px")
 ```
 
-```{r}
+## What it means by saying "visit done"?
+
+```{r visit_done}
 ## category 1: "Visit done" but incomplete == 1, need to explore the instances: whether repeat
 tb2y[77] %>%
   kable() %>%
   kable_styling()
+
+tb2y %>%
+  filter((str_detect(missed_fu, "Visit done") | str_detect(missed_fu, "Visit Done")) & incomplete == 1) %>%
+  kable() %>%
+  kable_styling() %>% 
+  scroll_box(width = "90%",height = "400px")
 
 ## category 2: "Visit done" while incomplete == 0, need to check whether they make up in this time.
 ## I think they are indeed missing ... so visit done is still some dirty data. 
 tb2y %>%
   filter((str_detect(missed_fu, "Visit done") | str_detect(missed_fu, "Visit Done")) & incomplete == 0) %>%
   kable() %>%
-  kable_styling()
+  kable_styling() %>% 
+  scroll_box(width = "90%",height = "400px")
 
 ```
 
