@@ -1,0 +1,851 @@
+---
+title: "QOLIE-31/QOLIE-AD-48 "
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+library(tidyverse)
+library(knitr)
+library(scales)
+library(lubridate)
+library(kableExtra)
+
+```
+
+## Source Data
+* BRIDGE follow-up dataset for all sites.
+Data in this version was pulled on 8/20/2021.
+
+```{r data, echo=FALSE}
+fu <- data.table::fread("../data/FollowDat.csv")
+```
+
+## Check N
+```{r form}
+ck <- fu %>% filter(redcap_repeat_instrument %in% c("diag_enroll","qolie_31_17_v0_m2_m24","qolie_48_1117_v0_m2_m24"))
+
+#form breakdown
+tc  <- ck %>% filter(redcap_repeat_instrument %in% c("qolie_31_17_v0_m2_m24","qolie_48_1117_v0_m2_m24")) %>% 
+  group_by(redcap_repeat_instrument,study_arm) %>% 
+  summarise(n_record=n(),n_headcount=n_distinct(record_id)) 
+tc %>% kable(caption = "QOLIE-31/48 number of records and number of unique children") %>% 
+  kable_styling()
+
+tt <-  fu %>% distinct(study_arm,record_id) 
+tt2 <- fu %>% filter(redcap_repeat_instrument %in% c("qolie_31_17_v0_m2_m24","qolie_48_1117_v0_m2_m24")) %>% 
+  distinct(study_arm,record_id) %>% 
+  mutate(anyrecord=1) %>% full_join(tt)
+
+tt2 %>% 
+  group_by(study_arm) %>% 
+  summarise(total_headcount=n(),with_any_record=sum(anyrecord,na.rm = T)) %>% 
+  mutate(pct=percent(with_any_record/total_headcount)) %>% 
+  kable(caption = "Number of unique id with any record") %>% 
+  kable_styling()
+cat("Please see check_age_exclusion.html for age check. Here only children between 11 and 17 are eligible for QOLIE-48 questionnaire and only those above 17 eligible to fill QOLIE-31.") 
+
+
+
+fu %>% filter(redcap_repeat_instrument=="qolie_31_17_v0_m2_m24") %>% count(study_arm,redcap_repeat_instance) %>% kable(caption="QOLIE-31 records by visit") %>% 
+  kable_styling()
+
+fu %>% filter(redcap_repeat_instrument=="qolie_48_1117_v0_m2_m24") %>% count(study_arm,redcap_repeat_instance) %>% kable(caption="QOLIE-AD-48 records by visit") %>% 
+  kable_styling()
+
+#very few qolie 31? up to 2 visits although fu should be up to 3?
+
+```
+
+## QOLIE-31  
+Please refer to qolie31_survey.pdf and qolie31_scoring.pdf for original scale details.  
+
+```{r q31}
+####score qolie 31####
+q31 <- fu %>% filter(redcap_repeat_instrument=="qolie_31_17_v0_m2_m24") %>% 
+  select(record_id,study_arm,starts_with("red"),starts_with("qolie31_q")) %>% 
+  rename_at(vars(starts_with("qolie31_")),~str_remove(.,"qolie31_")) 
+
+score_q31 <- function(df) {
+  d1 <- df %>% mutate(
+    #seizure worry
+    sw1=ifelse(q11==1,0,NA),
+    sw1=ifelse(q11==2,20, sw1),
+    sw1=ifelse(q11==3,40, sw1),
+    sw1=ifelse(q11==4,60, sw1),
+    sw1=ifelse(q11==5,80, sw1),
+    sw1=ifelse(q11==6,100,sw1),
+    
+    sw2=ifelse(q21==1,0,NA),
+    sw2=ifelse(q21==2,33.3,sw2),
+    sw2=ifelse(q21==3,66.7,sw2),
+    sw2=ifelse(q21==4,100, sw2),
+    
+    sw3=ifelse(q22==1,0,NA),
+    sw3=ifelse(q22==2,50, sw3),
+    sw3=ifelse(q22==3,100,sw3),
+    
+    sw4=ifelse(q23==1,0,NA),
+    sw4=ifelse(q23==2,33.3,sw4),
+    sw4=ifelse(q23==3,66.7,sw4),
+    sw4=ifelse(q23==4,100, sw4),
+    
+    sw5=ifelse(q25==1,100,NA),
+    sw5=ifelse(q25==2,75,sw5),
+    sw5=ifelse(q25==3,50,sw5),
+    sw5=ifelse(q25==4,25,sw5),
+    sw5=ifelse(q25==5,0, sw5)
+  ) %>% mutate(
+    #overall quality of life
+    ql1=q1*10,
+    
+    ql2=ifelse(q14==1,100,NA),
+    ql2=ifelse(q14==2,75,ql2),
+    ql2=ifelse(q14==3,50,ql2),
+    ql2=ifelse(q14==4,25,ql2),
+    ql2=ifelse(q14==5,0, ql2)
+  ) %>% mutate(
+    #emotional well-being
+    ew1=ifelse(q3==1,0,NA),
+    ew1=ifelse(q3==2,20, ew1),
+    ew1=ifelse(q3==3,40, ew1),
+    ew1=ifelse(q3==4,60, ew1),
+    ew1=ifelse(q3==5,80, ew1),
+    ew1=ifelse(q3==6,100,ew1),
+    
+    ew2=ifelse(q4==1,0,NA),
+    ew2=ifelse(q4==2,20, ew2),
+    ew2=ifelse(q4==3,40, ew2),
+    ew2=ifelse(q4==4,60, ew2),
+    ew2=ifelse(q4==5,80, ew2),
+    ew2=ifelse(q4==6,100,ew2),
+    
+    ew3=ifelse(q5==1,100,NA),
+    ew3=ifelse(q5==2,80,ew3),
+    ew3=ifelse(q5==3,60,ew3),
+    ew3=ifelse(q5==4,40,ew3),
+    ew3=ifelse(q5==5,20,ew3),
+    ew3=ifelse(q5==6,0, ew3),
+    
+    ew4=ifelse(q7==1,0,NA),
+    ew4=ifelse(q7==2,20, ew4),
+    ew4=ifelse(q7==3,40, ew4),
+    ew4=ifelse(q7==4,60, ew4),
+    ew4=ifelse(q7==5,80, ew4),
+    ew4=ifelse(q7==6,100,ew4),
+    
+    ew5=ifelse(q9==1,100,NA),
+    ew5=ifelse(q9==2,80,ew5),
+    ew5=ifelse(q9==3,60,ew5),
+    ew5=ifelse(q9==4,40,ew5),
+    ew5=ifelse(q9==5,20,ew5),
+    ew5=ifelse(q9==6,0, ew5),
+  ) %>% mutate(
+    #energy/fatigue
+    ef1=ifelse(q2==1,100,NA),
+    ef1=ifelse(q2==2,80,ef1),
+    ef1=ifelse(q2==3,60,ef1),
+    ef1=ifelse(q2==4,40,ef1),
+    ef1=ifelse(q2==5,20,ef1),
+    ef1=ifelse(q2==6,0, ef1),
+    
+    ef2=ifelse(q6==1,100,NA),
+    ef2=ifelse(q6==2,80,ef2),
+    ef2=ifelse(q6==3,60,ef2),
+    ef2=ifelse(q6==4,40,ef2),
+    ef2=ifelse(q6==5,20,ef2),
+    ef2=ifelse(q6==6,0, ef2),
+    
+    ef3=ifelse(q8==1,0,NA),
+    ef3=ifelse(q8==2,20, ef3),
+    ef3=ifelse(q8==3,40, ef3),
+    ef3=ifelse(q8==4,60, ef3),
+    ef3=ifelse(q8==5,80, ef3),
+    ef3=ifelse(q8==6,100,ef3),
+    
+    ef4=ifelse(q10==1,0,NA),
+    ef4=ifelse(q10==2,20, ef4),
+    ef4=ifelse(q10==3,40, ef4),
+    ef4=ifelse(q10==4,60, ef4),
+    ef4=ifelse(q10==5,80, ef4),
+    ef4=ifelse(q10==6,100,ef4),
+  ) %>% mutate(
+    #cognitive
+    cg1=ifelse(q12==1,0,NA),
+    cg1=ifelse(q12==2,20, cg1),
+    cg1=ifelse(q12==3,40, cg1),
+    cg1=ifelse(q12==4,60, cg1),
+    cg1=ifelse(q12==5,80, cg1),
+    cg1=ifelse(q12==6,100,cg1),
+    
+    cg2=ifelse(q15==1,0,NA),
+    cg2=ifelse(q15==2,33.3,cg2),
+    cg2=ifelse(q15==3,66.7,cg2),
+    cg2=ifelse(q15==4,100, cg2),
+    
+    cg3=ifelse(q16==1,0,NA),
+    cg3=ifelse(q16==2,20, cg3),
+    cg3=ifelse(q16==3,40, cg3),
+    cg3=ifelse(q16==4,60, cg3),
+    cg3=ifelse(q16==5,80, cg3),
+    cg3=ifelse(q16==6,100,cg3),
+    
+    cg4=ifelse(q17==1,0,NA),
+    cg4=ifelse(q17==2,20, cg4),
+    cg4=ifelse(q17==3,40, cg4),
+    cg4=ifelse(q17==4,60, cg4),
+    cg4=ifelse(q17==5,80, cg4),
+    cg4=ifelse(q17==6,100,cg4),
+    
+    cg5=ifelse(q18==1,0,NA),
+    cg5=ifelse(q18==2,20, cg5),
+    cg5=ifelse(q18==3,40, cg5),
+    cg5=ifelse(q18==4,60, cg5),
+    cg5=ifelse(q18==5,80, cg5),
+    cg5=ifelse(q18==6,100,cg5),
+    
+    cg6=ifelse(q26==1,100,NA),
+    cg6=ifelse(q26==2,75,cg6),
+    cg6=ifelse(q26==3,50,cg6),
+    cg6=ifelse(q26==4,25,cg6),
+    cg6=ifelse(q26==5,0, cg6)
+  ) %>% mutate(
+    #medication effects
+    me1=ifelse(q24==1,0,NA),
+    me1=ifelse(q24==2,33.3,me1),
+    me1=ifelse(q24==3,66.7,me1),
+    me1=ifelse(q24==4,100, me1),
+    
+    me2=ifelse(q29==1,100,NA),
+    me2=ifelse(q29==2,75,me2),
+    me2=ifelse(q29==3,50,me2),
+    me2=ifelse(q29==4,25,me2),
+    me2=ifelse(q29==5,0, me2),
+    
+    me3=ifelse(q30==1,100,NA),
+    me3=ifelse(q30==2,75,me3),
+    me3=ifelse(q30==3,50,me3),
+    me3=ifelse(q30==4,25,me3),
+    me3=ifelse(q30==5,0, me3)
+  ) %>% mutate(
+    #social function
+    sf1=ifelse(q13==1,0,NA),
+    sf1=ifelse(q13==2,20, sf1),
+    sf1=ifelse(q13==3,40, sf1),
+    sf1=ifelse(q13==4,60, sf1),
+    sf1=ifelse(q13==5,80, sf1),
+    sf1=ifelse(q13==6,100,sf1),
+    
+    sf2=ifelse(q19==1,0,NA),
+    sf2=ifelse(q19==2,25, sf2),
+    sf2=ifelse(q19==3,50, sf2),
+    sf2=ifelse(q19==4,75, sf2),
+    sf2=ifelse(q19==5,100,sf2),
+    
+    sf3=ifelse(q20==1,0,NA),
+    sf3=ifelse(q20==2,25, sf3),
+    sf3=ifelse(q20==3,50, sf3),
+    sf3=ifelse(q20==4,75, sf3),
+    sf3=ifelse(q20==5,100,sf3),
+    
+    sf4=ifelse(q27==1,100,NA),
+    sf4=ifelse(q27==2,75,sf4),
+    sf4=ifelse(q27==3,50,sf4),
+    sf4=ifelse(q27==4,25,sf4),
+    sf4=ifelse(q27==5,0, sf4),
+    
+    sf5=ifelse(q28==1,100,NA),
+    sf5=ifelse(q28==2,75,sf5),
+    sf5=ifelse(q28==3,50,sf5),
+    sf5=ifelse(q28==4,25,sf5),
+    sf5=ifelse(q28==5,0, sf5)
+  )
+  
+  #summarise: what to do with missing item? currently averaging by domain
+  d1 %>% rowwise() %>% 
+    mutate(sum_sw=mean(c(sw1,sw2,sw3,sw4,sw5),na.rm = T),
+           sum_ql=mean(c(ql1,ql2),na.rm = T),
+           sum_ew=mean(c(ew1,ew2,ew3,ew4,ew5),na.rm = T),
+           sum_ef=mean(c(ef1,ef2,ef3,ef4),na.rm = T),
+           sum_cg=mean(c(cg1,cg2,cg3,cg4,cg5,cg6),na.rm = T),
+           sum_me=mean(c(me1,me2,me3),na.rm = T),
+           sum_sf=mean(c(sf1,sf2,sf3,sf4,sf5),na.rm = T)
+    ) %>% ungroup() %>% 
+    mutate(overall=sum_sw*0.08+sum_ql*0.14+sum_ew*0.15+sum_ef*0.12+
+             sum_cg*0.27+sum_me*0.03+sum_sf*0.21)
+  #what if missing one domain?
+  # return(d2)
+}
+
+```
+
+```{r r1}
+r31 <-  score_q31(q31) 
+
+#count missing
+r31x <- r31 %>% rowwise() %>% 
+  mutate(miss_item=sum(is.na(c_across(sw1:sf5))),
+         miss_domain=sum(is.na(c_across(starts_with("sum")))))
+
+
+ggplot(data=r31x) + 
+  geom_histogram(aes(x=miss_item),binwidth = 1) +
+  facet_grid(study_arm~.) +
+  theme_minimal() +
+  xlab("Number of missing item") + ylab("Freq") +
+  ggtitle("Missing any of the 30 questions in QOLIE-31")
+
+t31 <- r31x %>% mutate(miss_any_item=as.integer(miss_item>0),
+                       miss_any_domain=as.integer(miss_domain>0),
+                       miss_all=as.integer(miss_domain==7)) 
+
+t31 %>% 
+  group_by(study_arm) %>% 
+  summarise(n=n(),
+            miss_any_item=sum(miss_any_item),
+            miss_any_domain=sum(miss_any_domain),
+            miss_all=sum(miss_all)) %>% 
+  kable(caption = "Missing any item or any domain (missing overall score?)") %>% 
+  kable_styling()
+
+t31 %>% 
+  group_by(study_arm,redcap_repeat_instance) %>% 
+  summarise(n=n(),
+            miss_any_item=sum(miss_any_item),
+            miss_any_domain=sum(miss_any_domain),
+            miss_all=sum(miss_all)) %>% 
+  kable(caption = "By visit") %>% 
+  kable_styling()
+
+
+
+ggplot(r31) + geom_boxplot(aes(x=study_arm,y=overall)) +
+  coord_flip() + theme_minimal() + 
+  ggtitle("Distribution of Qolie 31 Overall Score")
+
+# r31 %>% filter(study_arm=="EUC") %>% 
+#   select(starts_with("sum"),overall) %>% summary() %>% 
+#   kable(caption = "QOLIE-31 - EUC") %>% 
+#   kable_styling()
+# r31 %>% filter(study_arm=="TSC") %>% 
+#   select(starts_with("sum"),overall) %>% summary() %>% 
+#   kable(caption = "QOLIE-31 - TSC") %>% 
+#   kable_styling()
+
+
+```
+
+
+```{r r1x}
+#### full
+full <- list()
+full$tsc <- r31x %>% filter(study_arm=="TSC") %>% 
+  group_by(record_id) %>% 
+  summarise(mean_quolie=mean(overall,na.rm = T)) %>% 
+  ungroup() 
+full$euc <- r31x %>% filter(study_arm=="EUC") %>% 
+  group_by(record_id) %>% 
+  summarise(mean_quolie=mean(overall,na.rm = T)) %>% 
+  ungroup() 
+# map(full,~summary(.x$mean_quolie))
+s1 <- map_dbl(full,~sum(.x$mean_quolie,na.rm = T))
+s2 <- map_dbl(full,~(.x %>% filter(mean_quolie>=0) %>% distinct(record_id) %>% nrow()))
+o1 <- data.frame(item="Average score per patient",
+                 TSC_total=s1["tsc"] %>% unname(),
+                 TSC_N=s2["tsc"] %>% unname(),
+                 EUC_total=s1["euc"] %>% unname(),
+                 EUC_N=s2["euc"] %>% unname(),
+                 stringsAsFactors = F) %>% 
+  mutate(TSC_per_patient=TSC_total/TSC_N,
+         EUC_per_patient=EUC_total/EUC_N,
+         diff=TSC_per_patient-EUC_per_patient) %>% 
+  relocate(item,starts_with("tsc"),starts_with("euc"))
+
+o1 %>% kable(caption = "QOLIE-31") %>% 
+  kable_styling()
+
+
+#### by visit ####t2 <- bm2 %>% 
+
+bv <- list()
+bv$tsc <- r31x %>% filter(study_arm=="TSC") %>%  filter(overall>=0) 
+bv$euc <- r31x %>% filter(study_arm=="EUC") %>%  filter(overall>=0)  
+# map(bv,~summary(.x$q))
+# map(bv,~summary(.x$q))
+s1x <- map(bv,~(
+  .x %>% group_by(redcap_repeat_instance) %>% summarise(tot=sum(overall,na.rm = T)) 
+)) %>% bind_rows(.id="study_arm")
+s2x <- map(bv,~(.x %>% distinct(redcap_repeat_instance,record_id) %>% count(redcap_repeat_instance))) %>% bind_rows(.id="study_arm")
+
+o2 <- full_join(s1x,s2x) %>% 
+  mutate(per_patient=tot/n) %>% 
+  pivot_wider(names_from = study_arm,values_from = tot:per_patient) %>% 
+  select(visit=redcap_repeat_instance,
+         TSC_total=tot_tsc,
+         TSC_N=n_tsc,
+         TSC_per_patient=per_patient_tsc,
+         EUC_total=tot_euc,
+         EUC_N=n_euc,
+         EUC_per_patient=per_patient_euc
+  ) %>% 
+  mutate(diff=TSC_per_patient-EUC_per_patient)
+
+
+
+o2 %>% kable(caption = "QOLIE-31 Split up follow-up") %>% 
+  kable_styling()
+
+
+#### by gender, visit ####
+
+#fill gender for all records
+# fu %>% count(study_arm,gender) 
+#there is one unspecified gender (exclude?)
+ex1 <- fu %>% filter(!is.na(gender),gender>2) 
+gd <- fu %>% filter(!is.na(gender)) %>% distinct(record_id,gender,study_arm) 
+bg <- list()
+bg$tsc <- r31x %>% filter(study_arm=="TSC") %>% filter(overall>=0) %>% left_join(gd) 
+bg$euc <- r31x %>% filter(study_arm=="EUC") %>% filter(overall>=0)  %>% left_join(gd)
+# map(bg,~summary(.x$q))
+# map(bg,~summary(.x$gender))
+s1y <- map(bg,~(
+  .x %>% filter(gender==1 | gender==2) %>% 
+    group_by(gender,redcap_repeat_instance) %>% summarise(tot=sum(overall,na.rm = T)) 
+)) %>% bind_rows(.id="study_arm")
+s2y <- map(bg,~(.x %>% filter(gender==1 | gender==2) %>% 
+                  distinct(gender, redcap_repeat_instance,record_id) %>% 
+                  count(gender,redcap_repeat_instance))) %>% bind_rows(.id="study_arm")
+
+o3 <- full_join(s1y,s2y) %>% 
+  mutate(per_patient=tot/n) %>% 
+  pivot_wider(names_from = study_arm,values_from = tot:per_patient) %>% 
+  select(gender,visit=redcap_repeat_instance,
+         TSC_total=tot_tsc,
+         TSC_N=n_tsc,
+         TSC_per_patient=per_patient_tsc,
+         EUC_total=tot_euc,
+         EUC_N=n_euc,
+         EUC_per_patient=per_patient_euc
+  ) %>% 
+  mutate(diff=TSC_per_patient-EUC_per_patient) %>% 
+  arrange(desc(gender),visit) %>% 
+  mutate(gender=factor(gender,levels=1:2,labels=c("Female","Male")))
+
+o3 %>% kable(caption = "QOLIE-48 Split up follow-up and gender") %>% 
+  kable_styling()
+
+```
+
+
+
+
+## QOLIE-AD-48  
+Please refer to Cramer 1999 QOLIE-AD-48.pdf for original scale details.    
+
+Question 16 and 18 are missing from the survey.
+
+* 16. Had a problem with complicated projects that require organization or planning like computer games or difficult homework)?   
+* 18. Had trouble finding the correct word?
+
+Question 47 looks slightly different in order and preset (currently included in results):  
+
+* Original instrumentL 47. Feel that your epilepsy kept you from doing things you like to do?  
+The following questions ask about your attitudes toward epilepsy. Circle one number for how often in the past 4 weeks you have had these attitudes. [Very (negative) = 1, A little (negative) = 2, Not sure = 3, A little (positive) = 4, Very (positive) = 51.
+
+* In our survey: 
+The following questions are about your regular daily activities, such as chores at home, baby -sitting, going to school, gathering with friends and family, dong homework, or an extra activity after school. We want to know if you had an of the following difficulties with your regular activities as a result of any physical problems such as an illness or emotional problems, such as feeling sad or nervous.  
+In the past four weeks, how often have physical or emotional problems caused you to:
+Do fewer things than you would have liked to do?
+1	Very often  
+2	Often  
+3	Sometimes  
+4	Not often  
+5	Never  
+
+**ZZ: We decided to ignore the two missing questions and treat the slightly different question 47 same as the original one in scoring.**  
+
+
+```{r q48}
+xw <- readxl::read_xlsx("../qolie/qolie48_xwalk.xlsx",sheet = 2)
+q48 <- fu %>% filter(redcap_repeat_instrument=="qolie_48_1117_v0_m2_m24") %>% 
+  select(record_id,study_arm,starts_with("red"),starts_with("qolie48_"))
+
+vv <- data.frame(vn2=names(q48),x=1:length(names(q48)),stringsAsFactors = F) 
+#%>% inner_join(xw) 
+
+#rename survey question to align with original questionnaire
+for(i in 1:nrow(vv)) {
+  names(q48)[which(names(q48)==vv$vn2[i])] <- paste0("q",vv$questionnaire[i])
+}
+
+sc5 <- function(dt,vf,vt) {
+  v1 <- vf
+  v1 <- ensym(v1)
+  dd <- dt %>% select(!!v1) %>%
+    mutate(v=ifelse(!!v1==1,0,NA),
+           v=ifelse(!!v1==2,25, v),
+           v=ifelse(!!v1==3,50, v),
+           v=ifelse(!!v1==4,75, v),
+           v=ifelse(!!v1==5,100,v)) %>% 
+    select(-!!v1)
+  names(dd) <- vt
+  return(dd)
+}
+
+
+
+sc4 <- function(dt,vf,vt) {
+  v1 <- vf
+  v1 <- ensym(v1)
+  dd <- dt %>% select(!!v1) %>%
+    mutate(v=ifelse(!!v1==1,0,NA),
+           v=ifelse(!!v1==2,33.3, v),
+           v=ifelse(!!v1==3,66.7, v),
+           v=ifelse(!!v1==4,100,  v)) %>% 
+    select(-!!v1)
+  names(dd) <- vt
+  return(dd)
+}
+
+#missing 16,18 for now
+score_q48 <- function(df) {
+  #epilepsy impact
+  ei <- list(
+    lq = paste0("q",c(25:27,29:34,36,47,48)),
+    lv = paste0("ei",1:12)
+  )
+  r_ei <- map2(ei$lq,ei$lv,~sc5(dt=df,vf=.x,vt=.y)) %>% bind_cols()
+  
+  #memory/concentration
+  mc <- list(
+    # lq = paste0("q",c(8,12:20)),
+    lq = paste0("q",c(8,12:15,17,19,20)),
+    # lv = paste0("mc",1:10)
+    lv = paste0("mc",1:8)
+  ) 
+  r_mc <- map2(mc$lq,mc$lv,~sc5(dt=df,vf=.x,vt=.y))  %>% bind_cols()
+  
+  #attitudes toward epilepsy
+  at <- list(
+    lq = paste0("q",c(43:46)),
+    lv = paste0("at",1:4)
+  ) 
+  r_at <- map2(at$lq,at$lv,~sc5(dt=df,vf=.x,vt=.y))  %>% bind_cols()
+  
+  #physical functioning
+  pf <- list(
+    lq = paste0("q",c(3:7)),
+    lv = paste0("pf",1:5)
+  ) 
+  r_pf <- map2(pf$lq,pf$lv,~sc5(dt=df,vf=.x,vt=.y))  %>% bind_cols()
+  
+  #stigma (4 category)
+  st <- list(
+    lq = paste0("q",c(37:42)),
+    lv = paste0("st",1:6)
+  ) 
+  r_st <- map2(st$lq,st$lv,~sc4(dt=df,vf=.x,vt=.y))  %>% bind_cols()
+  
+  #social support
+  ss <- list(
+    lq = paste0("q",c(21:24)),
+    lv = paste0("ss",1:4)
+  ) 
+  r_ss <- map2(ss$lq,ss$lv,~sc5(dt=df,vf=.x,vt=.y))  %>% bind_cols()
+  
+  #school behavior
+  sb <- list(
+    lq = paste0("q",c(9:11,27)),
+    lv = paste0("sb",1:4)
+  ) 
+  r_sb <- map2(sb$lq,sb$lv,~sc5(dt=df,vf=.x,vt=.y))  %>% bind_cols()
+  
+  #health perceptions
+  hp <- list(
+    lq = paste0("q",c(1,2,35)),
+    lv = paste0("hp",1:3)
+  ) 
+  r_hp <- map2(hp$lq,hp$lv,~sc5(dt=df,vf=.x,vt=.y))  %>% bind_cols()
+  
+  #summarise: what to do with missing item? currently averaging by domain
+  d1 <- bind_cols(r_ei,r_mc,r_at,r_pf,r_st,r_ss,r_sb,r_hp) %>% rowwise() %>% 
+    mutate(sum_ei=mean(c_across(ei1:ei12),na.rm = T),
+           # sum_mc=mean(c_across(mc1:mc10),na.rm = T),
+           sum_mc=mean(c_across(mc1:mc8),na.rm = T),
+           sum_at=mean(c_across(at1:at4),na.rm = T),
+           sum_pf=mean(c_across(pf1:pf5),na.rm = T),
+           sum_st=mean(c_across(st1:st6),na.rm = T),
+           sum_ss=mean(c_across(ss1:ss4),na.rm = T),
+           sum_sb=mean(c_across(sb1:sb4),na.rm = T),
+           sum_hp=mean(c_across(hp1:hp3),na.rm = T)
+    ) %>% ungroup() %>% 
+    mutate(overall=sum_ei*0.31+
+             sum_mc*0.17+
+             sum_at*0.09+
+             sum_pf*0.09+
+             sum_st*0.13+
+             sum_ss*0.02+
+             sum_sb*0.06+
+             sum_hp*0.12)
+}
+
+```
+
+
+
+```{r r2}
+
+r48p <- score_q48(q48) 
+r48 <- bind_cols(q48,r48p)
+
+#count missing
+r48x <- r48 %>% rowwise() %>% 
+  mutate(miss_item=sum(is.na(c_across(ei1:hp3))),
+         miss_domain=sum(is.na(c_across(starts_with("sum")))))
+
+
+save(r48x,r31x,file="re_qolie.rda")
+
+
+ggplot(data=r48x) + 
+  geom_histogram(aes(x=miss_item),binwidth = 1) +
+  facet_grid(study_arm~.) +
+  theme_minimal() +
+  xlab("Number of missing item") + ylab("Freq") +
+  ggtitle("Missing any of the 46(48) questions in QOLIE-48")
+
+
+t48 <- r48x %>% mutate(miss_any_item=as.integer(miss_item>0),
+                       miss_any_domain=as.integer(miss_domain>0),
+                       miss_all=as.integer(miss_domain==8)) 
+
+t48 %>% 
+  group_by(study_arm) %>% 
+  summarise(n=n(),
+            miss_any_item=sum(miss_any_item),
+            miss_any_domain=sum(miss_any_domain),
+            miss_all=sum(miss_all)) %>% 
+  kable(caption = "Missing any item or any domain (missing overall score?)") %>% 
+  kable_styling()
+
+t48 %>% 
+  group_by(study_arm,redcap_repeat_instance) %>% 
+  summarise(n=n(),
+            miss_any_item=sum(miss_any_item),
+            miss_any_domain=sum(miss_any_domain),
+            miss_all=sum(miss_all)) %>% 
+  kable(caption = "By visit") %>% 
+  kable_styling()
+
+
+
+r48x %>% mutate(miss_any=as.integer(miss_item>0)) %>% 
+  count(study_arm,miss_any) %>% kable(caption="Missing any item") %>% 
+  kable_styling()
+
+r48x %>% mutate(domain=as.integer(miss_domain>0),
+                all=as.integer(miss_domain==8)) %>% 
+  group_by(study_arm) %>% 
+  summarise(n=n(),miss_any_domain=sum(domain),miss_all=sum(all)) %>% 
+  kable(caption = "Missing any domain (missing overall score?)") %>% 
+  kable_styling()
+
+r48x %>% mutate(domain=as.integer(miss_domain>0),
+                all=as.integer(miss_domain==8)) %>% 
+  group_by(study_arm,redcap_repeat_instance) %>% 
+  summarise(n=n(),miss_any_domain=sum(domain),miss_all=sum(all)) %>% 
+  kable(caption = "Missing any domain (missing overall score?)") %>% 
+  kable_styling()
+
+
+ggplot(r48) + geom_boxplot(aes(x=study_arm,y=overall)) +
+  coord_flip() + theme_minimal() + 
+  ggtitle("Distribution of Qolie 31 Overall Score")
+
+# r31 %>% filter(study_arm=="EUC") %>% 
+#   select(starts_with("sum"),overall) %>% summary() %>% 
+#   kable(caption = "QOLIE-31 - EUC")
+# r31 %>% filter(study_arm=="TSC") %>% 
+#   select(starts_with("sum"),overall) %>% summary() %>% 
+#   kable(caption = "QOLIE-31 - TSC")
+
+
+
+
+```
+
+```{r r2x}
+#### full
+full <- list()
+full$tsc <- r48x %>% filter(study_arm=="TSC") %>% 
+  group_by(record_id) %>% 
+  summarise(mean_quolie=mean(overall,na.rm = T)) %>% 
+  ungroup() 
+full$euc <- r48x %>% filter(study_arm=="EUC") %>% 
+  group_by(record_id) %>% 
+  summarise(mean_quolie=mean(overall,na.rm = T)) %>% 
+  ungroup() 
+# map(full,~summary(.x$mean_quolie))
+s1 <- map_dbl(full,~sum(.x$mean_quolie,na.rm = T))
+s2 <- map_dbl(full,~(.x %>% filter(mean_quolie>=0) %>% distinct(record_id) %>% nrow()))
+o1 <- data.frame(item="Average score per patient",
+                 TSC_total=s1["tsc"] %>% unname(),
+                 TSC_N=s2["tsc"] %>% unname(),
+                 EUC_total=s1["euc"] %>% unname(),
+                 EUC_N=s2["euc"] %>% unname(),
+                 stringsAsFactors = F) %>% 
+  mutate(TSC_per_patient=TSC_total/TSC_N,
+         EUC_per_patient=EUC_total/EUC_N,
+         diff=TSC_per_patient-EUC_per_patient) %>% 
+  relocate(item,starts_with("tsc"),starts_with("euc"))
+
+o1 %>% kable(caption = "QOLIE-48") %>% 
+  kable_styling()
+
+
+#### by visit ####t2 <- bm2 %>% 
+
+bv <- list()
+bv$tsc <- r48x %>% filter(study_arm=="TSC") %>%  filter(overall>=0) 
+bv$euc <- r48x %>% filter(study_arm=="EUC") %>%  filter(overall>=0)  
+# map(bv,~summary(.x$q))
+# map(bv,~summary(.x$q))
+s1x <- map(bv,~(
+  .x %>% group_by(redcap_repeat_instance) %>% summarise(tot=sum(overall,na.rm = T)) 
+)) %>% bind_rows(.id="study_arm")
+s2x <- map(bv,~(.x %>% distinct(redcap_repeat_instance,record_id) %>% count(redcap_repeat_instance))) %>% bind_rows(.id="study_arm")
+
+o2 <- full_join(s1x,s2x) %>% 
+  mutate(per_patient=tot/n) %>% 
+  pivot_wider(names_from = study_arm,values_from = tot:per_patient) %>% 
+  select(visit=redcap_repeat_instance,
+         TSC_total=tot_tsc,
+         TSC_N=n_tsc,
+         TSC_per_patient=per_patient_tsc,
+         EUC_total=tot_euc,
+         EUC_N=n_euc,
+         EUC_per_patient=per_patient_euc
+  ) %>% 
+  mutate(diff=TSC_per_patient-EUC_per_patient)
+
+
+
+o2 %>% kable(caption = "QOLIE-48 Split up follow-up") %>% 
+  kable_styling()
+
+
+#### by gender, visit ####
+
+#fill gender for all records
+# fu %>% count(study_arm,gender) 
+#there is one unspecified gender (exclude?)
+ex1 <- fu %>% filter(!is.na(gender),gender>2) 
+gd <- fu %>% filter(!is.na(gender)) %>% distinct(record_id,gender,study_arm) 
+bg <- list()
+bg$tsc <- r48x %>% filter(study_arm=="TSC") %>% filter(overall>=0) %>% left_join(gd) 
+bg$euc <- r48x %>% filter(study_arm=="EUC") %>% filter(overall>=0)  %>% left_join(gd)
+# map(bg,~summary(.x$q))
+# map(bg,~summary(.x$gender))
+s1y <- map(bg,~(
+  .x %>% filter(gender==1 | gender==2) %>% 
+    group_by(gender,redcap_repeat_instance) %>% summarise(tot=sum(overall,na.rm = T)) 
+)) %>% bind_rows(.id="study_arm")
+s2y <- map(bg,~(.x %>% filter(gender==1 | gender==2) %>% 
+                  distinct(gender, redcap_repeat_instance,record_id) %>% 
+                  count(gender,redcap_repeat_instance))) %>% bind_rows(.id="study_arm")
+
+o3 <- full_join(s1y,s2y) %>% 
+  mutate(per_patient=tot/n) %>% 
+  pivot_wider(names_from = study_arm,values_from = tot:per_patient) %>% 
+  select(gender,visit=redcap_repeat_instance,
+         TSC_total=tot_tsc,
+         TSC_N=n_tsc,
+         TSC_per_patient=per_patient_tsc,
+         EUC_total=tot_euc,
+         EUC_N=n_euc,
+         EUC_per_patient=per_patient_euc
+  ) %>% 
+  mutate(diff=TSC_per_patient-EUC_per_patient) %>% 
+  arrange(desc(gender),visit) %>% 
+  mutate(gender=factor(gender,levels=1:2,labels=c("Female","Male")))
+
+o3 %>% kable(caption = "QOLIE-48 Split up follow-up and gender") %>% 
+  kable_styling()
+
+```
+
+
+## Age exclusion
+Please see check_age_exclusion.html for detailed results.  
+Most QOLIE-48 records meet age criteria.  
+
+**ZZ: As Lizet mentioned, some healthcare workers filled QOLIE-31 for some children who did not meet the age critaria then corrected with QOLIE-48 later and the dates could be messed up. For some participants, v1 was essentially the baseline, which makes analysis stratefied by instance variable less meaningful. We need to consider redefining baseline and how to compare data points over time.**  
+
+## Check time interval for QOLIE-48
+```{r interval}
+f48 <- fu %>% filter(redcap_repeat_instrument=="qolie_48_1117_v0_m2_m24") %>%
+  select(record_id,visit=redcap_repeat_instance,study_arm,dateqolie48) %>%
+  mutate(value=1,date=as_date(dateqolie48)) %>% 
+  select(-dateqolie48) %>% 
+  pivot_wider(names_from = visit, names_prefix = "v", 
+              values_from = c(value,date)) %>% 
+  replace_na(list(value_v1=0,value_v2=0,value_v3=0)) %>% 
+  unite("fu_pattern",value_v1:value_v3,sep = "",remove = F) 
+
+#unique missing pattern
+f48w <- f48 %>% count(study_arm,fu_pattern) %>% 
+  group_by(study_arm) %>% 
+  mutate(tot=sum(n)) %>% 
+  ungroup() %>% 
+  mutate(pct=n/tot,
+         lbl=paste0(n," (",percent(pct),")"))
+
+```
+
+Method: Among those who contributed more than one QOLIE 48 records, check the time interval between the two records. So if visit pattern is 110, then take the difference between instance 1 and instance 2. If the visit pattern is 011, then take the difference between instance 2 and instance 3. For those who have 3 records, check instance 1 and 2.  
+```{r check}
+f48 %>% rowwise() %>% 
+  mutate(n_visit=sum(value_v1,value_v2,value_v3,na.rm = T)) %>% 
+  count(study_arm,n_visit) %>% 
+  kable(caption = "total number of records each participant contributes") %>% 
+  kable_styling()
+
+#look at interval between visit among those with more than 1 records
+f48d <- f48 %>% rowwise() %>% 
+  mutate(n_visit=sum(value_v1,value_v2,value_v3,na.rm = T)) %>% 
+  ungroup() %>% filter(n_visit>1) %>% 
+  mutate(int=ifelse(fu_pattern=="110",date_v2-date_v1,
+                    ifelse(fu_pattern=="011",date_v3-date_v2,date_v2-date_v1)))
+         
+
+
+f48d %>% ggplot(aes(x=study_arm,y=int)) +
+    geom_boxplot() + ylab("time interval") +
+    coord_flip() + theme_minimal() +
+  ggtitle("Time interval between 1st and 2nd QOLIE-48 records")
+
+f48d %>% ggplot(aes(x=int)) + 
+  geom_histogram(binwidth = 2) +
+  facet_grid(study_arm~.) +
+  theme_minimal() +
+  xlab("time") + ylab("Freq") +
+  ggtitle("Distribution of time interval between 1st and 2nd QOLIE-48 records (expected 56 days)")
+
+f48d %>% mutate(n_within14=ifelse(int>=56-14 & int<=56+14, 1,0)) %>% 
+  count(study_arm,n_within14) %>% 
+  kable(caption = "Time interval between 1st and 2nd records within 56 +/- 14 range") %>% 
+  kable
+cat("n_within14=1 means time interval falls within range, 0 means out of range.")
+
+         
+```
+Similar to what we have seen in VAS check, two thirds of participants have a reasonable time interval between two visits. Howerver, outliers can be problematic. 
+
+
+
