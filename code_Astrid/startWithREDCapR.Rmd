@@ -1,0 +1,83 @@
+---
+title: "basicRwithREDCap"
+date: "`r Sys.Date()`"
+author: "Astrid"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+## Packages
+
+```{r packages, message = FALSE, warning = FALSE}
+# for pulling data
+# install.packages("REDCapR")
+library(REDCapR)
+
+# include almost all the basic and useful packages: dplyr, ggplot2, kable... 
+library(tidyverse)
+
+# to display better in the output
+library(kableExtra)
+```
+
+## ifelse and loop
+
+```{r}
+a = 3
+if (a > 1){
+  print("a is bigger!")
+} else {
+  print("a is not bigger")
+}
+
+while (a > 1){
+  print("a is bigger")
+  a = a - 1
+}
+```
+
+## First: Pull data from REDCap
+
+for local CSV file: `data.table::fread("C://project.csv")`\
+for local XLSX file: `readxl::read_xlsx("//.xlsx")`
+
+If multiply data sources:
+
+-   inner_join(): includes all rows in x and y.
+-   left_join(): includes all rows in x.
+-   right_join(): includes all rows in y.
+-   full_join(): includes all rows in x or y.
+
+```{r redcap, message=FALSE, warning = FALSE}
+api_token_test = "8458469EB55794CFE30909CE1B861AEA"
+api_url = 'https://redcap.vanderbilt.edu/api/'
+
+Dat <- redcap_read(redcap_uri=api_url, token=api_token_test, verbose = FALSE, raw_or_label = "raw", raw_or_label_headers = "raw")$data
+
+Dat %>%
+  filter(redcap_repeat_instrument == "follow_up_care_form") %>%
+  # group_by() %>%
+  # summarize() %>%
+  kable(caption = "Look through what we've pulled!") %>%
+  kable_styling() %>% 
+  scroll_box(height = "400px")
+```
+
+## Data Clearance
+
+1.  definition of variables: rename, factorization, check data types
+2.  everything in one column reasonable -- no out-of-range, no duplicates, no typo
+3.  missing cases
+
+```{r variables, message=FALSE, warning=FALSE}
+#names(Dat) = c(record_id = "id","instrument",...)
+#class()
+#format() # Date and Time
+
+#range()
+#duplicated()
+
+#is.na()
+```

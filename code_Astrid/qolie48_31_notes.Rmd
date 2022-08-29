@@ -1,6 +1,7 @@
 ---
-title: "QOLIE-31/QOLIE-AD-48 "
+title: "QOLIE-31/QOLIE-AD-48 redo"
 date: "`r Sys.Date()`"
+author: "Astrid"
 output: 
   html_document:
     toc: TRUE
@@ -16,19 +17,26 @@ library(knitr)
 library(scales)
 library(lubridate)
 library(kableExtra)
-
 ```
 
 ## Source Data
-* BRIDGE follow-up dataset for all sites.
-Data in this version was pulled on 8/20/2021.
+
+-   BRIDGE follow-up QOLIE 31 & 48 dataset for all sites. Data in this version was pulled on 8/8/2022.
 
 ```{r data, echo=FALSE}
 fu <- data.table::fread("../data/FollowDat.csv")
 ```
 
 ## Check N
+
+One of the to-dos is to check the age of participants for QOLIE-48(11 - 17) and QOLIE-32(18 & older)
+
 ```{r form}
+# which one helps to figure out some basic information. 
+# like gender?
+
+
+
 ck <- fu %>% filter(redcap_repeat_instrument %in% c("diag_enroll","qolie_31_17_v0_m2_m24","qolie_48_1117_v0_m2_m24"))
 
 #form breakdown
@@ -49,8 +57,8 @@ tt2 %>%
   mutate(pct=percent(with_any_record/total_headcount)) %>% 
   kable(caption = "Number of unique id with any record") %>% 
   kable_styling()
-cat("Please see check_age_exclusion.html for age check. Here only children between 11 and 17 are eligible for QOLIE-48 questionnaire and only those above 17 eligible to fill QOLIE-31.") 
 
+cat("Please see check_age_exclusion.html for age check. Here only children between 11 and 17 are eligible for QOLIE-48 questionnaire and only those above 17 eligible to fill QOLIE-31.") 
 
 
 fu %>% filter(redcap_repeat_instrument=="qolie_31_17_v0_m2_m24") %>% count(study_arm,redcap_repeat_instance) %>% kable(caption="QOLIE-31 records by visit") %>% 
@@ -63,8 +71,9 @@ fu %>% filter(redcap_repeat_instrument=="qolie_48_1117_v0_m2_m24") %>% count(stu
 
 ```
 
-## QOLIE-31  
-Please refer to qolie31_survey.pdf and qolie31_scoring.pdf for original scale details.  
+## QOLIE-31
+
+Please refer to qolie31_survey.pdf and qolie31_scoring.pdf for original scale details.
 
 ```{r q31}
 ####score qolie 31####
@@ -341,7 +350,6 @@ ggplot(r31) + geom_boxplot(aes(x=study_arm,y=overall)) +
 
 ```
 
-
 ```{r r1x}
 #### full
 full <- list()
@@ -442,48 +450,51 @@ o3 %>% kable(caption = "QOLIE-48 Split up follow-up and gender") %>%
 
 ```
 
+## QOLIE-AD-48
 
-
-
-## QOLIE-AD-48  
-Please refer to Cramer 1999 QOLIE-AD-48.pdf for original scale details.    
+Please refer to Cramer 1999 QOLIE-AD-48.pdf for original scale details.
 
 Question 16 and 18 are missing from the survey.
 
-* 16. Had a problem with complicated projects that require organization or planning like computer games or difficult homework)?   
-* 18. Had trouble finding the correct word?
+-   
 
-Question 47 looks slightly different in order and preset (currently included in results):  
+    16. Had a problem with complicated projects that require organization or planning like computer games or difficult homework)?\
 
-* Original instrumentL 47. Feel that your epilepsy kept you from doing things you like to do?  
-The following questions ask about your attitudes toward epilepsy. Circle one number for how often in the past 4 weeks you have had these attitudes. [Very (negative) = 1, A little (negative) = 2, Not sure = 3, A little (positive) = 4, Very (positive) = 51.
+-   
 
-* In our survey: 
-The following questions are about your regular daily activities, such as chores at home, baby -sitting, going to school, gathering with friends and family, dong homework, or an extra activity after school. We want to know if you had an of the following difficulties with your regular activities as a result of any physical problems such as an illness or emotional problems, such as feeling sad or nervous.  
-In the past four weeks, how often have physical or emotional problems caused you to:
-Do fewer things than you would have liked to do?
-1	Very often  
-2	Often  
-3	Sometimes  
-4	Not often  
-5	Never  
+    18. Had trouble finding the correct word?
 
-**ZZ: We decided to ignore the two missing questions and treat the slightly different question 47 same as the original one in scoring.**  
+Question 47 looks slightly different in order and preset (currently included in results):
 
+-   Original instrumentL 47. Feel that your epilepsy kept you from doing things you like to do?\
+    The following questions ask about your attitudes toward epilepsy. Circle one number for how often in the past 4 weeks you have had these attitudes. [Very (negative) = 1, A little (negative) = 2, Not sure = 3, A little (positive) = 4, Very (positive) = 51.
+
+-   In our survey: The following questions are about your regular daily activities, such as chores at home, baby -sitting, going to school, gathering with friends and family, dong homework, or an extra activity after school. We want to know if you had an of the following difficulties with your regular activities as a result of any physical problems such as an illness or emotional problems, such as feeling sad or nervous.\
+    In the past four weeks, how often have physical or emotional problems caused you to: Do fewer things than you would have liked to do? 1 Very often\
+    2 Often\
+    3 Sometimes\
+    4 Not often\
+    5 Never
+
+**as ZZ, We decided to ignore the two missing questions and treat the slightly different question 47 same as the original one in scoring.**
+
+One more question: there's two 27 in Cramer(1999), based on the context, which should be a typo.
 
 ```{r q48}
-xw <- readxl::read_xlsx("../qolie/qolie48_xwalk.xlsx",sheet = 2)
+xwalk <- readxl::read_xlsx("../code_Astrid/qolie48_xwalk.xlsx")
 q48 <- fu %>% filter(redcap_repeat_instrument=="qolie_48_1117_v0_m2_m24") %>% 
   select(record_id,study_arm,starts_with("red"),starts_with("qolie48_"))
 
-vv <- data.frame(vn2=names(q48),x=1:length(names(q48)),stringsAsFactors = F) 
-#%>% inner_join(xw) 
+vv = data.frame(vn_redcap=names(q48),x=1:length(names(q48)),stringsAsFactors = F) %>%
+  left_join(xwalk, by = "vn_redcap") 
+# there will be NA
 
 #rename survey question to align with original questionnaire
 for(i in 1:nrow(vv)) {
-  names(q48)[which(names(q48)==vv$vn2[i])] <- paste0("q",vv$questionnaire[i])
+  names(q48)[which(names(q48)==vv$vn_redcap[i])] <- vv$vn_Cramer[i]
 }
 
+# score for questions that have 5-point
 sc5 <- function(dt,vf,vt) {
   v1 <- vf
   v1 <- ensym(v1)
@@ -499,7 +510,7 @@ sc5 <- function(dt,vf,vt) {
 }
 
 
-
+#score for questions that have 4-point
 sc4 <- function(dt,vf,vt) {
   v1 <- vf
   v1 <- ensym(v1)
@@ -517,7 +528,7 @@ sc4 <- function(dt,vf,vt) {
 score_q48 <- function(df) {
   #epilepsy impact
   ei <- list(
-    lq = paste0("q",c(25:27,29:34,36,47,48)),
+    lq = paste0("q",c(25,26,28:34,36,47,48)),
     lv = paste0("ei",1:12)
   )
   r_ei <- map2(ei$lq,ei$lv,~sc5(dt=df,vf=.x,vt=.y)) %>% bind_cols()
@@ -596,8 +607,6 @@ score_q48 <- function(df) {
 }
 
 ```
-
-
 
 ```{r r2}
 
@@ -780,14 +789,15 @@ o3 %>% kable(caption = "QOLIE-48 Split up follow-up and gender") %>%
 
 ```
 
-
 ## Age exclusion
-Please see check_age_exclusion.html for detailed results.  
-Most QOLIE-48 records meet age criteria.  
 
-**ZZ: As Lizet mentioned, some healthcare workers filled QOLIE-31 for some children who did not meet the age critaria then corrected with QOLIE-48 later and the dates could be messed up. For some participants, v1 was essentially the baseline, which makes analysis stratefied by instance variable less meaningful. We need to consider redefining baseline and how to compare data points over time.**  
+Please see check_age_exclusion.html for detailed results.\
+Most QOLIE-48 records meet age criteria.
+
+**ZZ: As Lizet mentioned, some healthcare workers filled QOLIE-31 for some children who did not meet the age critaria then corrected with QOLIE-48 later and the dates could be messed up. For some participants, v1 was essentially the baseline, which makes analysis stratefied by instance variable less meaningful. We need to consider redefining baseline and how to compare data points over time.**
 
 ## Check time interval for QOLIE-48
+
 ```{r interval}
 f48 <- fu %>% filter(redcap_repeat_instrument=="qolie_48_1117_v0_m2_m24") %>%
   select(record_id,visit=redcap_repeat_instance,study_arm,dateqolie48) %>%
@@ -808,7 +818,8 @@ f48w <- f48 %>% count(study_arm,fu_pattern) %>%
 
 ```
 
-Method: Among those who contributed more than one QOLIE 48 records, check the time interval between the two records. So if visit pattern is 110, then take the difference between instance 1 and instance 2. If the visit pattern is 011, then take the difference between instance 2 and instance 3. For those who have 3 records, check instance 1 and 2.  
+Method: Among those who contributed more than one QOLIE 48 records, check the time interval between the two records. So if visit pattern is 110, then take the difference between instance 1 and instance 2. If the visit pattern is 011, then take the difference between instance 2 and instance 3. For those who have 3 records, check instance 1 and 2.
+
 ```{r check}
 f48 %>% rowwise() %>% 
   mutate(n_visit=sum(value_v1,value_v2,value_v3,na.rm = T)) %>% 
@@ -840,12 +851,11 @@ f48d %>% ggplot(aes(x=int)) +
 f48d %>% mutate(n_within14=ifelse(int>=56-14 & int<=56+14, 1,0)) %>% 
   count(study_arm,n_within14) %>% 
   kable(caption = "Time interval between 1st and 2nd records within 56 +/- 14 range") %>% 
-  kable
+  kable_styling()
+
 cat("n_within14=1 means time interval falls within range, 0 means out of range.")
 
          
 ```
-Similar to what we have seen in VAS check, two thirds of participants have a reasonable time interval between two visits. Howerver, outliers can be problematic. 
 
-
-
+Similar to what we have seen in VAS check, two thirds of participants have a reasonable time interval between two visits. Howerver, outliers can be problematic.

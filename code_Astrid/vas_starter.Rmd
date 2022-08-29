@@ -159,6 +159,7 @@ I found some responses meaning not missing, and I picked them out:
 -   "No miss",
 -   "No messing",
 -   "No missen",
+-   "No missing",
 -   "0",
 -   "On time"
 
@@ -175,7 +176,7 @@ I use the important indices below to distinguish whether they are actually missi
 ## visit done is not a enough answer and causes conflicts sometimes. Visit done may be made up later(delay), but this one is missed. 
 # how many kids have several records for the same instance
 fcf2 = fcf1 %>%
-  mutate(missed = ifelse(missed_fu %in% c("No", "No missed", "None", "N0", "Not missed", "NO", "No miss", "No messing", "No missen", "0", "On time") | ((str_detect(missed_fu, "Visit done") | str_detect(missed_fu, "Visit Done") | is.na(missed_fu)) & incomplete == 0), 0, 1))
+  mutate(missed = ifelse(missed_fu %in% c("No", "No missed", "None", "N0", "Not missed", "NO", "No miss", "No missing", "No messing", "No missen", "0", "On time") | ((str_detect(missed_fu, "Visit done") | str_detect(missed_fu, "Visit Done") | is.na(missed_fu)) & incomplete == 0), 0, 1))
 
 fcf2 %>%
   group_by(study_arm) %>% 
@@ -225,13 +226,52 @@ fcf_c %>%
 
 ## category 2: "Visit done" while incomplete == 0, need to check whether they make up in this time.
 ## I think they are indeed missing ... so visit done is still some dirty data. 
-fcf1 %>%
-  filter((str_detect(missed_fu, "Visit done") | str_detect(missed_fu, "Visit Done")) & incomplete == 0) %>%
-  group_by(chwidfu, redcap_repeat_instance) %>%
-  kable(caption = "'Visit Done'but incomplete = No, seems like they're finally finished") %>%
+#fcf1 %>%
+  #filter((str_detect(missed_fu, "Visit done") | str_detect(missed_fu, "Visit Done")) & incomplete == 0) %>%
+  #group_by(chwidfu, redcap_repeat_instance) %>%
+  #kable(caption = "'Visit Done'but incomplete = No, seems like they're finally finished") %>%
+  #kable_styling() %>% 
+  #scroll_box(height = "400px")
+```
+
+## will they fill all the optional questions?
+
+Some questions are required by RedCap. Others are optional.   
+
+```{r check-not-required, message = FALSE, warning=FALSE}
+#count missing
+fcf_fill1 <- fcf2 %>% filter(missed == 1) %>% rowwise() %>% 
+  mutate(miss_item=sum(is.na(c_across(head_circum:blood_v2)))+sum(is.na(c_across(working_memory_v2:left_leg3_v2))))
+
+ggplot(data=fcf_fill1) + 
+  geom_histogram(aes(x=miss_item),binwidth = 1) +
+  facet_grid(study_arm~.) +
+  theme_minimal() +
+  xlab("Number of missing item") + ylab("Freq") +
+  ggtitle("Missing any of the optional matrix questions in QOLIE-31 for missed cases")
+
+fcf_fill1 %>%
+  filter(miss_item < 5) %>%
+  count(missed_fu, sort = TRUE) %>%
+  transmute(missed_fu, freq = n) %>%
+  kable(caption = "'missed_fu reasons for those who still complete most of the questions") %>%
   kable_styling() %>% 
   scroll_box(height = "400px")
+
+# count missing for none-missed cases
+fcf_fill0 <- fcf2 %>% filter(missed == 0) %>% rowwise() %>% 
+  mutate(miss_item=sum(is.na(c_across(head_circum:blood_v2)))+sum(is.na(c_across(working_memory_v2:left_leg3_v2))))
+
+ggplot(data=fcf_fill0) + 
+  geom_histogram(aes(x=miss_item),binwidth = 1) +
+  facet_grid(study_arm~.) +
+  theme_minimal() +
+  xlab("Number of missing item") + ylab("Freq") +
+  ggtitle("Missing any of the optional matrix questions in QOLIE-31 after deleting the missed cases")
+
+
 ```
+
 
 ## What will they do if missing a visit?
 
