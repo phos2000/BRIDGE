@@ -1,0 +1,64 @@
+---
+title: "look_into_screening"
+format: html
+editor: visual
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+library(tidyverse)
+library(knitr)
+library(scales)
+library(lubridate)
+library(kableExtra)
+```
+
+You can add options to executable code like this
+
+```{r data, echo=FALSE}
+fu <- data.table::fread("../data/FollowDat.csv")
+# 1792 record ids
+bs <- data.table::fread("../data/BaseDat.csv")
+# 1791 unique ids
+```
+
+```{r visit, message=FALSE, warning=FALSE}
+scr48 <- bs %>% filter(qolie_48_1117_v0_complete == "2")
+cap("There're 403 unique ids(participants) among the records of qolie_48 for the screening questionnaire")
+# dateqolie48
+scr31 <- bs %>% filter(qolie_31_17_v0_complete == "2")
+# dateqolie31
+
+qq48 <- fu %>% filter(redcap_repeat_instrument=="qolie_48_1117_v0_m2_m24")
+cap("There're 836 record ids(participants) among the records of qolie_48 for the follow up questionnaire")
+
+qq31 <- fu %>% filter(redcap_repeat_instrument=="qolie_31_17_v0_m2_m24")
+# FCF datefu works. There's also dateqolie48/31
+
+# compare the distance for instance=1/2/3 dateqolie48 in qq with scr48
+
+# is the records in scr48 all have a fu record or more?
+visits48 = scr48 %>%
+  select(redcap_repeat_instance, contains("qolie48"), contains('qolie_48'), unique_id) %>%
+  left_join(y = qq48 %>%
+              filter(qolie_48_1117_v0_m2_m24_complete == "2") %>%
+              select(record_id, redcap_repeat_instance, study_arm, contains("qolie48"), contains('qolie_48')),
+            by = c('unique_id' = 'record_id'), suffix = c('_screen', '_followup')) %>%
+  mutate(scr_fu_date = as.integer(as.Date(dateqolie48_followup) - as.Date(dateqolie48_screen)))
+
+cap("only 23/403 participants have the first visit of follow-up visit and the screening one on the same day")
+
+visits48 %>%
+  filter(scr_fu_date == 0) %>%
+  select(unique_id, study_arm, redcap_repeat_instance_screen, redcap_repeat_instance_followup, dateqolie48_screen, dateqolie48_followup) %>%
+  kable(caption = "among all participants have QOLIE-48 in screening, 23 have the screening the same day with Visit 1 in follow-up") %>%
+  kable_styling()
+
+visits48_scr0_fu1_melt = reshape::melt(visits48 %>% filter(scr_fu_date == 0),
+                              id = c(),
+                              variable.name = 'qolie48_item',
+                              value.name = 'qolie48_answer'
+                              )
+```

@@ -585,7 +585,9 @@ fudw <- fud %>% select(-datefu) %>% rename(age=agefu) %>%
          d45=as.integer(date_5-date_4),
          d56=as.integer(date_6-date_5),
          d67=as.integer(date_7-date_6),
-         d78=as.integer(date_8-date_7))
+         d78=as.integer(date_8-date_7),
+         d89=as.integer(date_9-date_8),
+         d109=as.integer(date_10-date_9))
 
 save(fudw,file="fcf_dates_wide.rda")
 
