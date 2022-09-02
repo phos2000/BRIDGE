@@ -1,5 +1,7 @@
 ---
 title: "look_into_screening"
+author: Astrid
+Date: "`r Sys.Date()`"
 format: html
 editor: visual
 ---
@@ -15,7 +17,9 @@ library(lubridate)
 library(kableExtra)
 ```
 
-You can add options to executable code like this
+# Data
+
+Both Basic Dataset from the Screening and Follow-up dataset from the 3 follow-up questionnaires.
 
 ```{r data, echo=FALSE}
 fu <- data.table::fread("../data/FollowDat.csv")
@@ -24,15 +28,44 @@ bs <- data.table::fread("../data/BaseDat.csv")
 # 1791 unique ids
 ```
 
-```{r visit, message=FALSE, warning=FALSE}
+## The Schedule for QOLIE
+
+**Follow-up structure based on codebook**\
+1. Follow up care form\
+\* instance 1 - Week 1\
+\* instance 2 - Month 1\
+\* instance 3 - Month 2\
+\* instance 4 - Month 4\
+\* instance 5 - Month 6\
+\* instance 6 - Month 9\
+\* instance 7 - Month 12\
+\* instance 8 - Month 15\
+\* instance 9 - Month 18\
+\* instance 10 - Month 24
+
+2.  QOLIE forms
+
+-   instance 1 - Visit 0(screening one, BaseDat)
+-   instance 2 - Month 2
+-   instance 3 - Month 24
+
+To figure out the question whether the Screening(Visit 0) is the first time of QOLIE-31 and QOLIE-48, I check the QOLIE-31 and QOLIE-48 records in the Screening.  
+
+```{r visit, echo = FALSE, message=FALSE, warning=FALSE}
 scr48 <- bs %>% filter(qolie_48_1117_v0_complete == "2")
-cap("There're 403 unique ids(participants) among the records of qolie_48 for the screening questionnaire")
+cat("There're 403 unique ids(participants) among the completed records of qolie_48 for the screening questionnaire")
 # dateqolie48
+
 scr31 <- bs %>% filter(qolie_31_17_v0_complete == "2")
+
+scr31 %>%
+  kable(caption = "There's only 1 completed records for QOLIE-31 in BaseDat") %>%
+  kable_styling()
+cat("Looks like the Visit 0 / Screening don't include the QOLIE-31, the 3 times of QOLIE-31 is finished during follow-up visits")
 # dateqolie31
 
 qq48 <- fu %>% filter(redcap_repeat_instrument=="qolie_48_1117_v0_m2_m24")
-cap("There're 836 record ids(participants) among the records of qolie_48 for the follow up questionnaire")
+cat("There're 836 record ids(participants) among the records of qolie_48 for the follow up questionnaire")
 
 qq31 <- fu %>% filter(redcap_repeat_instrument=="qolie_31_17_v0_m2_m24")
 # FCF datefu works. There's also dateqolie48/31
@@ -48,7 +81,7 @@ visits48 = scr48 %>%
             by = c('unique_id' = 'record_id'), suffix = c('_screen', '_followup')) %>%
   mutate(scr_fu_date = as.integer(as.Date(dateqolie48_followup) - as.Date(dateqolie48_screen)))
 
-cap("only 23/403 participants have the first visit of follow-up visit and the screening one on the same day")
+cat("only 23/403 participants have the first visit of follow-up visit and the screening one on the same day")
 
 visits48 %>%
   filter(scr_fu_date == 0) %>%
@@ -56,9 +89,73 @@ visits48 %>%
   kable(caption = "among all participants have QOLIE-48 in screening, 23 have the screening the same day with Visit 1 in follow-up") %>%
   kable_styling()
 
-visits48_scr0_fu1_melt = reshape::melt(visits48 %>% filter(scr_fu_date == 0),
-                              id = c(),
-                              variable.name = 'qolie48_item',
-                              value.name = 'qolie48_answer'
-                              )
+visits48 %>%
+  filter(scr_fu_date == 0) %>%
+  select(order(colnames(visits48))) %>%
+  select(starts_with("qolie48_")) %>%
+  kable(caption = "However, the follow up QOLIE answers different from screening QOLIE") %>%
+  kable_styling() %>%
+  scroll_box(height = "400px")
+
+# store the record_id, check how many instances they have
+
+same_day_id = visits48 %>%
+  filter(scr_fu_date == 0) %>%
+  count(unique_id)
+
+visits48_all = scr48 %>%
+  select(redcap_repeat_instance, contains("qolie48"), contains('qolie_48'), unique_id) %>%
+  full_join(y = qq48 %>%
+              filter(qolie_48_1117_v0_m2_m24_complete == "2") %>%
+              select(record_id, redcap_repeat_instance, study_arm, contains("qolie48"), contains('qolie_48')),
+            by = c('unique_id' = 'record_id'), suffix = c('_screen', '_followup'))
+cat("There're 849 record ids(participants) among the records of qolie_48 across the screening and the follow up questionnaires")
+
+visits48_all %>%
+  filter(unique_id %in% same_day_id$unique_id) %>%
+  count(unique_id) %>%
+  mutate(n = n+1) %>%
+  kable(caption = "The number of QOLIE for those have same day for Screening QOLIE 48 and Follow up QOLIE 48 -- Max is 4") %>%
+  kable_styling() %>%
+  scroll_box(height = "400px")
+
+visits48_all %>%
+  filter(!(unique_id %in% qq48$record_id)) %>%
+  kable(caption = "There's 29 participants in Screening don't have follow-up QOLIE-48") %>%
+  kable_styling() %>%
+  scroll_box(height = "400px")
+  
+# left join qq48 and BaseDat
+  
+```
+
+## Combination of all QOLIE
+
+Finally, we put all QOLIE records across Base Dataset and FollowUp Dataset together, called q31 and q48.  
+To investigate the demographic of participants, we will also create a dataset called demo.
+
+```{r qolie, echo=FALSE, warning = FALSE, message = FALSE}
+q31_fu <- fu %>% filter(redcap_repeat_instrument=="qolie_31_17_v0_m2_m24") %>% 
+  select(record_id, study_arm, starts_with("red"), contains("qolie31"), complete = qolie_31_17_v0_m2_m24_complete) %>% 
+  rename_at(vars(starts_with("qolie31_q")),~str_remove(.,"qolie31_")) %>%
+  mutate(form = "Follow Up Visits")
+
+q31_scr = scr31 %>% 
+  select(record_id = unique_id, study_arm, starts_with("red"), contains("qolie31"), complete = qolie_31_17_v0_complete,-redcap_event_name) %>% 
+  rename_at(vars(starts_with("qolie31_q")),~str_remove(.,"qolie31_")) %>%
+  mutate(form = "Screening")
+
+q31 = rbind.data.frame(q31_scr, q31_fu)
+
+q48_fu <- fu %>% filter(redcap_repeat_instrument=="qolie_48_1117_v0_m2_m24") %>% 
+  select(record_id,study_arm,starts_with("red"),contains("qolie48"), complete = qolie_48_1117_v0_m2_m24_complete) %>% 
+  mutate(form = "Follow Up Visits")
+
+q48_scr = scr48 %>% 
+  select(record_id = unique_id, study_arm, starts_with("red"), contains("qolie48"), complete = qolie_48_1117_v0_complete,-redcap_event_name) %>% 
+  mutate(form = "Screening")
+
+q48 = rbind.data.frame(q48_scr, q48_fu)
+
+cat("Should we delete the 29 participants only have screening but no follow up visits?")
 ```
