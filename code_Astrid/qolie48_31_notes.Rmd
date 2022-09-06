@@ -25,61 +25,16 @@ library(kableExtra)
 
 ```{r data, echo=FALSE}
 fu <- data.table::fread("../data/FollowDat.csv")
+load("original_qolie.rda")
 ```
 
-## Check N
-
-One of the to-dos is to check the age of participants for QOLIE-48(11 - 17) and QOLIE-32(18 & older)
-
-```{r form}
-# which one helps to figure out some basic information. 
-# like gender?
-
-
-
-ck <- fu %>% filter(redcap_repeat_instrument %in% c("diag_enroll","qolie_31_17_v0_m2_m24","qolie_48_1117_v0_m2_m24"))
-
-#form breakdown
-tc  <- ck %>% filter(redcap_repeat_instrument %in% c("qolie_31_17_v0_m2_m24","qolie_48_1117_v0_m2_m24")) %>% 
-  group_by(redcap_repeat_instrument,study_arm) %>% 
-  summarise(n_record=n(),n_headcount=n_distinct(record_id)) 
-tc %>% kable(caption = "QOLIE-31/48 number of records and number of unique children") %>% 
-  kable_styling()
-
-tt <-  fu %>% distinct(study_arm,record_id) 
-tt2 <- fu %>% filter(redcap_repeat_instrument %in% c("qolie_31_17_v0_m2_m24","qolie_48_1117_v0_m2_m24")) %>% 
-  distinct(study_arm,record_id) %>% 
-  mutate(anyrecord=1) %>% full_join(tt)
-
-tt2 %>% 
-  group_by(study_arm) %>% 
-  summarise(total_headcount=n(),with_any_record=sum(anyrecord,na.rm = T)) %>% 
-  mutate(pct=percent(with_any_record/total_headcount)) %>% 
-  kable(caption = "Number of unique id with any record") %>% 
-  kable_styling()
-
-cat("Please see check_age_exclusion.html for age check. Here only children between 11 and 17 are eligible for QOLIE-48 questionnaire and only those above 17 eligible to fill QOLIE-31.") 
-
-
-fu %>% filter(redcap_repeat_instrument=="qolie_31_17_v0_m2_m24") %>% count(study_arm,redcap_repeat_instance) %>% kable(caption="QOLIE-31 records by visit") %>% 
-  kable_styling()
-
-fu %>% filter(redcap_repeat_instrument=="qolie_48_1117_v0_m2_m24") %>% count(study_arm,redcap_repeat_instance) %>% kable(caption="QOLIE-AD-48 records by visit") %>% 
-  kable_styling()
-
-#very few qolie 31? up to 2 visits although fu should be up to 3?
-
-```
 
 ## QOLIE-31
 
 Please refer to qolie31_survey.pdf and qolie31_scoring.pdf for original scale details.
 
-```{r q31}
+```{r q31-score}
 ####score qolie 31####
-q31 <- fu %>% filter(redcap_repeat_instrument=="qolie_31_17_v0_m2_m24") %>% 
-  select(record_id,study_arm,starts_with("red"),starts_with("qolie31_q")) %>% 
-  rename_at(vars(starts_with("qolie31_")),~str_remove(.,"qolie31_")) 
 
 score_q31 <- function(df) {
   d1 <- df %>% mutate(

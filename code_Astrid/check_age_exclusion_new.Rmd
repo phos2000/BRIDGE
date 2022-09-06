@@ -63,7 +63,7 @@ fu <- data.table::fread("../data/FollowDat.csv")
 
 **Age variables:**  
 
-* Age calculated from date of birth (from diag_enroll) and dateqolie3/dateqolie48 (currently being used to assess whether QOLIE records meet age criteria).    
+* Age calculated from date of birth (from diag_enroll) and dateqolie31/dateqolie48 (currently being used to assess whether QOLIE records meet age criteria).    
 * Another approach is visit 3 and visit 7 in follow up care form correspond to month 2 and month 24, follow up age can be used or follow up date minus date of birth.     
 **ZZ: Using different variables may render different results related to data missing and messed dates.**  
 

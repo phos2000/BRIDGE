@@ -1,0 +1,612 @@
+---
+title: "Qolie Visits Check"
+author: "Astrid"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+library(tidyverse)
+library(knitr)
+library(scales)
+library(lubridate)
+library(kableExtra)
+```
+
+# Data source and Preparation
+
+BRIDGE Screening and Follow-up data was pulled on 8/8/2022.
+
+```{r data}
+fu <- data.table::fread("../data/FollowDat.csv")
+# 1792 record ids
+# use redcap_repeat_instrument to locate the forms
+bs <- data.table::fread("../data/BaseDat.csv")
+# 1791 unique ids
+```
+
+## The Schedule for QOLIE
+
+There's only one time Screening.
+
+**Follow-up structure based on codebook**\
+
+1.  Follow up care form
+
+\* instance 1 - Week 1\
+\* instance 2 - Month 1\
+\* instance 3 - Month 2\
+\* instance 4 - Month 4\
+\* instance 5 - Month 6\
+\* instance 6 - Month 9\
+\* instance 7 - Month 12\
+\* instance 8 - Month 15\
+\* instance 9 - Month 18\
+\* instance 10 - Month 24
+
+2.  QOLIE forms
+
+-   instance 1 - Visit 0(Screening, BaseDat)
+-   instance 2 - Month 2
+-   instance 3 - Month 24
+
+## Criteria
+
+To figure out the question whether the Screening(Visit 0) is the first time of QOLIE-31 and QOLIE-48, I check the QOLIE-31 and QOLIE-48 records in the Screening.
+
+-   For Screening, as there was no mark for the instrument, the completed QOLIE-31(qolie_31_17_v0_complete = 2)/QOLIE-48(qolie_48_1117_v0_complete = 2) will be added as valid responses.
+-   For follow-up visits, using the mark redcap_repeat_instrument, the answers being "qolie_31_17_v0_m2_m24"/"qolie_48_1117_v0_m2_m24" will be added as valid reponses.
+
+```{r qolie}
+q31_fu <- fu %>% filter(redcap_repeat_instrument=="qolie_31_17_v0_m2_m24") %>% 
+  select(record_id, study_arm, starts_with("red"), ev0, contains("qolie31"), complete = qolie_31_17_v0_m2_m24_complete) %>% 
+  rename_at(vars(starts_with("qolie31_q")),~str_remove(.,"qolie31_")) %>%
+  mutate(form = "Follow Up Visits")
+
+q31_scr = bs %>% filter(qolie_31_17_v0_complete == "2") %>% 
+  mutate(redcap_repeat_instance = 0) %>%
+  select(record_id = unique_id, study_arm, starts_with("red"), ev0, contains("qolie31"), complete = qolie_31_17_v0_complete,-redcap_event_name) %>% 
+  rename_at(vars(starts_with("qolie31_q")),~str_remove(.,"qolie31_")) %>%
+  mutate(form = "Screening")
+
+q31_scr %>%
+  kable(caption = "There's only 1 completed records for QOLIE-31 in BaseDat") %>%
+  kable_styling() %>%
+  scroll_box()
+
+q31 = rbind.data.frame(q31_scr, q31_fu)
+
+q48_fu <- fu %>% filter(redcap_repeat_instrument=="qolie_48_1117_v0_m2_m24") %>% 
+  select(record_id,study_arm,starts_with("red"), ev0, contains("qolie48"), complete = qolie_48_1117_v0_m2_m24_complete) %>% 
+  mutate(form = "Follow Up Visits")
+
+q48_scr = bs %>% filter(qolie_48_1117_v0_complete == "2") %>% 
+  mutate(redcap_repeat_instance = 0) %>%
+  select(record_id = unique_id, study_arm, starts_with("red"), ev0, contains("qolie48"), complete = qolie_48_1117_v0_complete,-redcap_event_name) %>% 
+  mutate(form = "Screening")
+
+q48 = rbind.data.frame(q48_scr, q48_fu)
+```
+
+
+**Number of Unique participants** (including not completed cases)
+
+|   Data   |                Screening                |               Follow-up                |        Screening + Follow-up        |
+|:----------------:|:----------------:|:----------------:|:----------------:|
+| QOLIE-31 | `r count(q31_scr %>% count(record_id))` | `r count(q31_fu %>% count(record_id))` | `r count(q31 %>% count(record_id))` |
+| QOLIE-48 | `r count(q48_scr %>% count(record_id))` | `r count(q48_fu %>% count(record_id))` | `r count(q48 %>% count(record_id))` |
+
+As most of Screening responses don't include QOLIE-31, we will look for all the 3 times of QOLIE-31 during follow-up visits.\
+For the only QOLIE-31 response in Screening, the participants have three other completed QOLIE-48 records.
+
+```{r check-N}
+
+q31 %>%
+  group_by(study_arm) %>% 
+  summarise(n_record=n(),n_participant=n_distinct(record_id)) %>%
+  full_join(q48 %>% group_by(study_arm) %>% 
+  summarise(n_record=n(),n_participant=n_distinct(record_id))) %>% 
+  mutate(instrument = c("QOLIE-31","","QOLIE-AD-48","")) %>%
+  select(instrument, study_arm, n_record, n_participant) %>%
+  kable(caption = "QOLIE-31/48 number of records and number of unique children among Screening and Follow-up Visits") %>% 
+  kable_styling()
+
+full_join(q31, q48) %>% distinct(study_arm,record_id) %>% count(study_arm) %>%
+  full_join(fu %>% distinct(study_arm, record_id) %>% count(study_arm), by = "study_arm", suffix = c("_participants_with_any_qolie_records", "_participants")) %>%
+  mutate(pct=percent(n_participants_with_any_qolie_records/n_participants)) %>% 
+  kable(caption = "Number of unique children with any QOLIE record") %>% 
+  kable_styling()
+
+q31 %>% count(study_arm,redcap_repeat_instance) %>% 
+  kable(caption="QOLIE-31 records by visit") %>% 
+  kable_styling()
+
+q48 %>% count(study_arm,redcap_repeat_instance) %>% 
+  kable(caption="QOLIE-AD-48 records by visit") %>% 
+  kable_styling()
+```
+
+## Strange cases that will be included
+
+1.  `r count(q48 %>% count(record_id) %>% filter(n == 4))` participants have 4 times of QOLIE-48 forms: 1 in Screening and 3 in follow-up Visits. The Screening QOLIE will still work as the baseline.\
+2.  Some have their record time for Screening and time for Follow-up Visit 1 on the same day.
+
+```{r same-day}
+# is the records in scr48 all have a fu record or more?
+visits48 = q48_scr %>%
+  left_join(y = q48_fu,
+            by = 'record_id', suffix = c('_screen', '_followup')) %>%
+  mutate(scr_fu_date = as.integer(as.Date(dateqolie48_followup) - as.Date(dateqolie48_screen)))
+
+visits48 %>%
+  filter(scr_fu_date == 0) %>%
+  select(order(colnames(visits48))) %>%
+  select(record_id, redcap_repeat_instance_screen, redcap_repeat_instance_followup, dateqolie48_screen, dateqolie48_followup, starts_with("qolie48_")) %>%
+  kable(caption = "23 participants finish the Screening on the same day with Visit 1 in follow-up among all having QOLIE-48 in screening") %>%
+  kable_styling() %>%
+  scroll_box(height = "400px")
+
+cat("All the instances for the follow up visits were Visit 1.")
+cat("However, the follow up QOLIE answers were different from screening QOLIE.")  
+
+# store the record_id, check how many instances they have
+
+same_day_id = visits48 %>%
+  filter(scr_fu_date == 0) %>%
+  count(record_id)
+
+q48 %>%
+  filter(record_id %in% same_day_id$record_id) %>%
+  count(study_arm, record_id) %>%
+  kable(caption = "The times of QOLIE for those have same day for Screening and Follow up -- Max is 4") %>%
+  kable_styling() %>%
+  scroll_box(height = "400px")
+```
+
+## Missing cases
+
+### Rough Missing rates and distributions
+
+```{r missing-q31}
+q31 %>% filter(complete != 2) %>%
+  count(study_arm) %>%
+  full_join(q31 %>% count(study_arm), by = "study_arm", suffix = c("_complete_is_not_2", "_records")) %>%
+  mutate(pct = percent(n_complete_is_not_2 / n_records)) %>%
+  kable(caption = "Missing Rate for QOLIE-31") %>%
+  kable_styling()
+
+# simple check on the times of QOLIE
+q31 %>%
+  count(study_arm, record_id) %>%
+  group_by(study_arm, times_of_qolie31 = n) %>%
+  summarize(n_participants=n()) %>% ungroup(times_of_qolie31) %>%
+  mutate(pct = percent(n_participants / sum(n_participants))) %>%
+  kable(caption = "more than half of children only have one time of QOLIE-31") %>%
+  kable_styling()
+```
+
+```{r missing-q48}
+q48 %>%
+  filter(!(record_id %in% q48_fu$record_id)) %>%
+  kable(caption = "There's 29 participants in Screening don't have follow-up QOLIE-48") %>%
+  kable_styling() %>%
+  scroll_box(height = "400px")
+
+cat("Later we may delete these as we need follow-up visit records. ")
+
+q48 %>% filter(complete != 2) %>%
+  count(study_arm) %>%
+  full_join(q48 %>% count(study_arm), by = "study_arm", suffix = c("_complete_is_not_2", "_records")) %>%
+  mutate(pct = percent(n_complete_is_not_2 / n_records)) %>%
+  kable(caption = "Missing Rate for QOLIE-48") %>%
+  kable_styling()
+
+q48 %>%
+  count(study_arm, record_id) %>%
+  group_by(study_arm, times_of_qolie48 = n) %>%
+  summarize(n_participants=n()) %>% ungroup(times_of_qolie48) %>%
+  mutate(pct = percent(n_participants / sum(n_participants))) %>%
+  kable(caption = "more than 80% of children have >1 times of QOLIE-48") %>%
+  kable_styling()
+
+cat("later we will take the age change into consideration")
+```
+
+### Missing item
+
+Actually, the number of missing items is more reliable for defining missing cases. So we use miss_item \> **50%** to delete some cases.
+
+```{r q31-missing-item}
+q31m = q31 %>% rowwise() %>% 
+  mutate(miss_item=sum(is.na(c_across(q1:q31))))
+  
+ggplot(data=q31m) + 
+  geom_histogram(aes(x=miss_item),binwidth = 1) +
+  facet_grid(study_arm~.) +
+  theme_minimal() +
+  xlab("Number of missing item") + ylab("Freq") +
+  ggtitle("Missing any of the 30 questions in QOLIE-31")
+
+q31c = q31m %>% filter(miss_item <= 15)
+```
+
+```{r q48-missing-item}
+q48m <- q48 %>% rowwise() %>% 
+  mutate(miss_item=sum(is.na(c_across(qolie48_1:qolie48_49))))
+
+ggplot(data=q48m) + 
+  geom_histogram(aes(x=miss_item),binwidth = 1) +
+  facet_grid(study_arm~.) +
+  theme_minimal() +
+  xlab("Number of missing item") + ylab("Freq") +
+  ggtitle("Missing any of the 49 questions in QOLIE-48")
+
+q48c = q48m %>% filter(miss_item <= 24)
+```
+
+### Missing pattern
+
+Among the follow up visits, there should be only 2 times of QOLIE based on schedule(Plus 1 in Screening); however, the form allows 3 times of QOLIE during the follow up visits. Add the one in Screening, the maximum number of QOLIE will be 4: Visit 0(Screening) and Visit 1,2,3(Follow up Visits).
+
+'1010' means the participant has both Screening and Visit 2 records, but missing Visit 1 and 3 records(theoretically v2 and v3 in QOLIE forms), meaning only have 1 time of QOLIE in Screening and 1 time of QOLIE in Follow-up Visit.
+
+```{r q31-visit-pattern}
+f31 <- q31c %>%
+  select(record_id,visit=redcap_repeat_instance,study_arm,dateqolie31) %>%
+  mutate(value=1,date=as_date(dateqolie31)) %>% 
+  select(-dateqolie31) %>% 
+  pivot_wider(names_from = visit, names_prefix = "v", 
+              values_from = c(value,date)) %>% 
+  replace_na(list(value_v0 = 0, value_v1=0, value_v2=0, value_v3=0)) %>% 
+  unite("fu_pattern",c(value_v0, value_v1, value_v2, value_v3),sep = "",remove = F) 
+
+#unique missing pattern
+f31w <- f31 %>% count(study_arm,fu_pattern) %>% 
+  group_by(study_arm) %>% 
+  mutate(tot=sum(n)) %>% 
+  ungroup() %>% 
+  mutate(pct=n/tot,
+         lbl=paste0(n," (",percent(pct),")"))
+
+ggplot(data=f31w,aes(x=fu_pattern,y=n)) + 
+  geom_bar(stat="identity") + 
+  geom_text(aes(label=lbl),nudge_y = 15) +
+  ylim(c(0,max(f31w$n)+30)) +
+  ylab("Number of participants") +
+  xlab("Visit pattern") + 
+  coord_flip() +
+  facet_wrap(~study_arm) +
+  theme_minimal() +
+  ggtitle("QOLIE-31 records pattern ")
+
+cat("As half of QOLIE-31 is 0001 pattern, maybe they only have the last instance of QOLIE being 18 and older.")
+```
+
+```{r q48-visit pattern}
+f48 <- q48c %>%
+  select(record_id,visit=redcap_repeat_instance,study_arm,dateqolie48) %>%
+  mutate(value=1,date=as_date(dateqolie48)) %>% 
+  select(-dateqolie48) %>% 
+  pivot_wider(names_from = visit, names_prefix = "v", 
+              values_from = c(value,date)) %>% 
+  replace_na(list(value_v0 = 0, value_v1=0, value_v2=0, value_v3=0)) %>% 
+  unite("fu_pattern",value_v0:value_v3,sep = "",remove = F) 
+
+#unique missing pattern
+f48w <- f48 %>% count(study_arm,fu_pattern) %>% 
+  group_by(study_arm) %>% 
+  mutate(tot=sum(n)) %>% 
+  ungroup() %>% 
+  mutate(pct=n/tot,
+         lbl=paste0(n," (",percent(pct),")"))
+
+ggplot(data=f48w,aes(x=fu_pattern,y=n)) + 
+  geom_bar(stat="identity") + 
+  geom_text(aes(label=lbl),nudge_y = 110) +
+  ylim(c(0,max(f48w$n)+300)) +
+  ylab("Number of participants") +
+  xlab("Visit pattern") + 
+  coord_flip() +
+  facet_wrap(~study_arm) +
+  theme_minimal() +
+  ggtitle("QOLIE-48 records pattern")
+```
+
+# Age check
+
+1.  VAS should be completed for all participants in follow up visits (over 97% of participants in this dataset has at least one follow-up care form record and very few missing in VAS field based on previous reports).\
+    **VAS baseline was assessed during enrollment as part of the QOLIE-31/48 form, so theoretically only available among chidlren aged 11 and above.**
+
+2.  Quality of life questions will be asked at visit 0, 2 & 24 months
+
+17.99 should be regarded/floored as 17.  
+
+-   QOLIE-48, children 11-17 (*age_fu_v2\>=11 & \<=17 according to codebook*)
+-   QOLIE-31, 18 & older (*age_fu_v2\>17 according to codebook*)
+
+3.  Children \<11, should just be doing the VAS (in follow up visits)
+
+-   Ages 8-10: They can complete the VAS (Fig 1) by themselves
+-   \<Age 8: A proxy parent/guardian can rate how he/she rates the health of the child.
+
+**Age variables:**\
+\* Age calculated from date of birth (from diag_enroll) and dateqolie31/dateqolie48 (currently being used to assess whether QOLIE records meet age criteria).\
+\* Another approach is visit 3 and visit 7 in follow up care form correspond to month 2 and month 24, follow up age can be used or follow up date minus date of birth.-- However, they are not so consistent with the schedule.
+
+```{r age}
+# compare the distance for instance=1/2/3 dateqolie48
+# I think the whole process of qolie changes should be the next step to just observe the overtime change of scores after scoring
+
+load("fcf_dates_wide.rda")
+
+#age from scratch
+dob <- fu %>% mutate(bd=as_date(dob)) %>% filter(!is.na(bd)) %>% distinct(record_id,bd)
+
+#date_0 is the diag_enroll here
+#add screening(date_s)
+fudw = fudw %>% 
+  full_join(q48_scr %>% select(record_id, dateqolie48), by = "record_id") %>%
+  rename(date_s = dateqolie48)
+  
+fudw[fudw$record_id == q31_scr$record_id, "date_s"] = q31_scr$dateqolie31
+  
+#check age
+fudwx <- fudw %>% left_join(dob) %>% 
+  mutate(age_calc0=as.numeric((date_0-bd)/365.25),
+         age_calc1=as.numeric((date_1-bd)/365.25),
+         age_calc2=as.numeric((date_2-bd)/365.25),
+         age_calc3=as.numeric((date_3-bd)/365.25),
+         age_calc4=as.numeric((date_4-bd)/365.25),
+         age_calc5=as.numeric((date_5-bd)/365.25),
+         age_calc6=as.numeric((date_6-bd)/365.25),
+         age_calc7=as.numeric((date_7-bd)/365.25),
+         age_calc8=as.numeric((date_8-bd)/365.25),
+         age_calc9=as.numeric((date_9-bd)/365.25),
+         age_calc10=as.numeric((date_10-bd)/365.25)
+  )
+```
+
+## Baseline date
+
+Zilu learnt from Lizet that participants could "enroll" through either the screening or the follow up project. If ev0=1 (screening) then use date_consent_screen, if ev0=0 (follow-up) then dataconsentenroll.
+
+Zilu confirmed in data that only participants who enrolled via follow-up have a dateconsentenroll value (a handful of missing date). In most cases, the consent enroll date is about a week after consent screening date.
+
+A question need to solve later for time series analysis. 
+
+```{r baseline-date}
+tt %>% select(starts_with("de_"),date_baseline) %>% summary()
+tt %>% mutate(dd=de_fu-de_screen) %>% pull(dd) %>% as.numeric() %>% summary()
+
+fub <- fu %>% filter(redcap_repeat_instrument=="diag_enroll") %>%
+  select(record_id,study_arm,starts_with("date")) %>%
+  mutate_at(vars(starts_with("date")),as_date)
+# datefu
+# dateassentenroll, dataconsentenroll, which date used as baseline
+fub %>% select(starts_with("date")) %>% summary()
+cat("Not sure which date to use as baseline, missingness could be an issue")
+```
+
+## QOLIE-31 should be >= 18
+
+```{r q31-age}
+c31v0 <- q31c %>% filter(redcap_repeat_instance==1) %>% 
+  select(record_id,study_arm,ev0,redcap_repeat_instance,
+         dateqolie31,complete) %>%
+  left_join(dob) %>% 
+  mutate(date=as_date(dateqolie31),
+         age_calc0=as.numeric((date-bd)/365.25)) %>% 
+  left_join(q31c %>% select(record_id,redcap_repeat_instance)) 
+
+c31v0 %>% mutate(age_elig_met=as.integer(age_calc0>17)) %>% count(study_arm,age_elig_met) %>%
+  kable(caption = "QOLIE 31 Visit 0\n\n") %>% 
+  kable_styling()
+cat("*age_elig_met=1 means age meets the criteria")
+
+
+# c31v0 %>% mutate(age_elig_met=as.integer(age_calc0>17)) %>% count(ev0,age_elig_met) %>%
+#   kable(caption = "QOLIE 31 Visit 0: It happened to both screening and follow-up enrollees.")
+
+
+tm <- c31v0 %>% filter(age_calc0<=17) %>% select(record_id) %>% inner_join(qq) %>% distinct(record_id) %>% mutate(with_q48_record=1)
+
+tp <- c31v0 %>% filter(age_calc0<=17) %>% 
+  select(record_id,study_arm,age_calc0) %>% 
+  left_join(tm) %>% replace_na(list(with_q48_record=0)) 
+
+tp %>% 
+  kable(row.names=T,caption = "QOLIE 31 Visit 0: age criteria not met, many are close to 17") %>% 
+  kable_styling() %>% 
+  scroll_box(width = "100%",height = "400px")
+cat("*age_calc0 is the baseline age calculated from date of birth and qolie date.\n\n")
+cat("with_q48_record=1 means the participants have QOLIE 48 records found\n")
+cat(paste0("ZZ: ",sum(tp$with_q48_record)," of those ",nrow(tp)," children have QOLIE 48 records, which might suggest the issue was later corrected by staff. Should we just exclude those records?\n\n"))
+
+#denom
+fudwx %>% filter(age_calc0>17) %>% nrow() %>% paste0(.,"\n\n") %>% cat("Number of participants age over 17 at baseline date:",.)
+
+cat("ZZ: Here I looked at age at baseline date for everyone in the dataset to see theoretically how many records we should expect. However, the actual date could be very different and in case of delay may have underestimated the denominator.")
+
+
+
+c31v1 <- q31c %>% filter(redcap_repeat_instance==2) %>% 
+  select(record_id,study_arm,ev0,redcap_repeat_instance,
+         dateqolie31,qolie_31_17_v0_m2_m24_complete) %>%
+  left_join(dob) %>% 
+  mutate(date=as_date(dateqolie31),
+         age_calc1=as.numeric((date-bd)/365.25)) %>% 
+  left_join(q31c %>% select(record_id,redcap_repeat_instance))
+
+c31v1 %>% mutate(age_elig_met=as.integer(age_calc1>17)) %>% 
+  count(study_arm,age_elig_met) %>%
+  kable(caption = "QOLIE 31 Visit 1") %>% 
+  kable_styling()
+
+tm <- c31v1 %>% filter(age_calc1<=17) %>% select(record_id) %>% inner_join(qq) %>% distinct(record_id) %>% mutate(with_q48_record=1)
+tp <- c31v1 %>% filter(age_calc1<=17) %>% 
+  select(record_id,study_arm,age_calc1) %>% 
+  left_join(tm) %>% replace_na(list(with_q48_record=0)) 
+
+tp%>% 
+  kable(row.names=T,caption = "QOLIE 31 Visit 1: age criteria not met, about half are close to 17") %>% 
+  kable_styling() %>% 
+  scroll_box(width = "100%",height = "400px")
+
+cat("with_q48_record=1 means the participants have QOLIE 48 records found\n")
+cat(paste0("ZZ: ",sum(tp$with_q48_record)," of those ",nrow(tp)," children have QOLIE 48 records, which might suggest the issue was later corrected by staff. Should we just exclude those records?\n\n"))
+# c31v0 %>% filter(age_3<=17) %>% distinct(record_id) %>% nrow()
+# c31v0 %>% filter(age_3<=17) %>% select(record_id) %>% left_join(qq) %>% distinct(record_id) %>% nrow()
+
+
+#denom
+fudwx %>% filter(age_3>17) %>% nrow() %>% paste0(.,"\n") %>% cat("Number of participants age over 17 at v1 (age at instance 3 from follow up care form:",.)
+
+cat("These participants should theorectically have filled QOLIE 31 at that visit but did not have a record.")
+
+fudwx %>% filter(age_3>17) %>% distinct(record_id) %>%
+  left_join(c31v1 %>% distinct(record_id,hr=1)) %>%
+  filter(is.na(hr)) %>%
+  left_join(qq2) %>% count(redcap_repeat_instance) %>% filter(redcap_repeat_instance==1) %>% pull(n) %>% 
+  cat(.," of these participants had a baseline record, but no month 2 record.\n\n")
+
+
+e1 <- c31v0 %>% filter(age_calc0>17)
+e2 <- c31v1 %>% filter(age_calc1>17)
+```
+
+```{r q31-age_distribution}
+age31 <- q31c %>%
+  left_join(dob) %>% 
+  mutate(date=as_date(dateqolie31),
+         age_calc=as.numeric((date-bd)/365.25)) %>%
+  mutate(age_elig_met=as.integer(age_calc>17))
+
+ggplot(age31,aes(age_calc)) +
+  geom_histogram()
+
+```
+
+```{r q48-age_distribution}
+age48 <- q48c %>%
+  left_join(dob) %>% 
+  mutate(date=as_date(dateqolie48),
+         age_calc=as.numeric((date-bd)/365.25)) %>%
+  mutate(age_elig_met=as.integer(age_calc<=17, age_calc >= 11))
+
+ggplot(age48,aes(age_calc)) +
+  geom_histogram()
+```
+
+
+## QOLIE-48 should be 11-17
+
+```{r q48-age}
+#whether qolie 48 are age between 11 and 17
+c48v0 <- q48c %>% filter(redcap_repeat_instance==1) %>% 
+  select(record_id,study_arm,ev0,redcap_repeat_instance,
+         dateqolie48,complete) %>%
+  left_join(dob) %>% 
+  mutate(date=as_date(dateqolie48),
+         age_calc0=as.numeric((date-bd)/365.25)) %>% 
+  left_join(q48c %>% select(record_id,redcap_repeat_instance)) 
+
+
+c48v0 %>% mutate(age_elig_met=as.integer(age_calc0<=17,age_calc0>=11)) %>% count(study_arm,age_elig_met) %>%
+  kable(caption = "QOLIE 48 Visit 0: almost all records meet age criteria [11,17]") %>% 
+  kable_styling()
+cat("*age_elig_met=1 means age meets the criteria")
+
+#denom 
+td <- fudwx %>% filter(age_calc0<=17,age_calc0>=11)
+td %>% 
+  left_join(q48c %>% filter(redcap_repeat_instance==1) %>% 
+              select(record_id,study_arm) %>% 
+              mutate(with_q48_v0=1)) %>%
+  left_join(q48c %>% distinct(record_id,study_arm) %>% 
+              mutate(with_any_q48=1)) %>%
+  replace_na(list(with_q48_v0=0,with_any_q48=0)) %>% 
+  group_by(study_arm) %>% 
+  summarise(with_q48_v0=sum(with_q48_v0),
+            pct_q48_v0=percent(sum(with_q48_v0)/n()),
+            with_any_q48=sum(with_any_q48),
+            pct_any_q48=percent(sum(with_any_q48)/n())) %>% 
+  kable(caption = "Among participants between 11 and 17 at baseline date") %>% kable_styling()
+
+cat("with_q48_v0 means number of participants with an instance 1 QOLIE-48 record,\n
+    with_any_q48 means number of partcipants with any records (instance 1/2/3).\n\n")
+cat("The visit pattern shows that a number of participants started to contribute  from instance 2, which echos the table above showing over 90% of participants who were eligble at baseline turned out having any QOLIE-48 records and less than 75% showed up as v0.")
+
+c48v1 <- q48c %>% filter(redcap_repeat_instance==2) %>% 
+  select(record_id,study_arm,ev0,redcap_repeat_instance,
+         dateqolie48,complete) %>%
+  left_join(dob) %>% 
+  mutate(date=as_date(dateqolie48),
+         age_calc1=as.numeric((date-bd)/365.25)) %>% 
+  left_join(q48c %>% select(record_id,redcap_repeat_instance)) 
+
+c48v1 %>% mutate(age_elig_met=as.integer(age_calc1<=17,age_calc1>=11)) %>% count(study_arm,age_elig_met) %>%
+  kable(caption = "QOLIE 48 Visit 1: most records meet age criteria [11,17]") %>% 
+  kable_styling()
+cat("*age_elig_met=1 means age meets the criteria")
+
+#denom
+# fudwx %>% filter(age_3<=17,age_3>=11) %>% 
+#   left_join(qq %>% filter(redcap_repeat_instance==2) %>% 
+#               select(record_id,study_arm,ev0) %>% 
+#               mutate(with_q48_v1=1)) %>%
+#   replace_na(list(with_q48_v1=0)) %>% 
+#   count(study_arm,with_q48_v1) %>%  
+#   group_by(study_arm) %>% mutate(pct=percent(n/sum(n))) %>% 
+#   kable(caption = "Among participants between 11 and 17 at 2-month follow up") %>% 
+#   kable_styling()
+
+cat("More participants contributed to v1 (2-month follow-up) than to v0.\n\n")
+cat("ZZ: Here I looked at age at 2 month follow up visit for everyone in the dataset to see theoretically how many records we should expect. However, the actual date could be very different as the visit pattern already shows that a number of participants started to contribute records from instance 2, and no subsequent record.")
+cat("ZZ: A number of children who should be eligible for QOLIE-48 at baseline (based on dob and baseline date) did not have any records for baseline. Any explanation?\n\n")
+cat('ZZ:Need to think about what should be the real "baseline".')
+
+```
+
+
+```{r qolie-pattern}
+# if age changes, a chw may use QOLIE-31 first and then QOLIE-48. 
+# visit pattern. combined
+qc = full_join(q31c, q48c)
+patternc <- qc %>%
+  distinct(record_id,visit=redcap_repeat_instance,study_arm) %>%
+  # there are some overlapping
+  mutate(value=1) %>% 
+  pivot_wider(names_from = visit, names_prefix = "v", 
+              values_from = c(value)) %>% 
+  replace_na(list(v0=0, v1=0, v2=0, v3=0)) %>% 
+  unite("fu_pattern",c(v0,v1,v2,v3),sep = "",remove = F) 
+
+#unique missing pattern
+pcw <- patternc %>% count(study_arm,fu_pattern) %>% 
+  group_by(study_arm) %>% 
+  mutate(tot=sum(n)) %>% 
+  ungroup() %>% 
+  mutate(pct=n/tot,
+         lbl=paste0(n," (",percent(pct),")"))
+
+ggplot(data=pcw,aes(x=fu_pattern,y=n)) + 
+  geom_bar(stat="identity") + 
+  geom_text(aes(label=lbl),nudge_y = 110) +
+  ylim(c(0,max(pcw$n)+300)) +
+  ylab("Number of participants") +
+  xlab("Visit pattern") + 
+  coord_flip() +
+  facet_wrap(~study_arm) +
+  theme_minimal() +
+  ggtitle("QOLIE records pattern")
+```
+
+```{r save}
+save(q31_scr,q31_fu,q31,q31c, q48_scr,q48_fu,q48, q48c, file="original_qolie.rda")
+```

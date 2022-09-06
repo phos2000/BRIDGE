@@ -21,7 +21,7 @@ library(kableExtra)
 
 Both Basic Dataset from the Screening and Follow-up dataset from the 3 follow-up questionnaires.
 
-```{r data, echo=FALSE}
+```{r data}
 fu <- data.table::fread("../data/FollowDat.csv")
 # 1792 record ids
 bs <- data.table::fread("../data/BaseDat.csv")
@@ -49,7 +49,7 @@ bs <- data.table::fread("../data/BaseDat.csv")
 -   instance 2 - Month 2
 -   instance 3 - Month 24
 
-To figure out the question whether the Screening(Visit 0) is the first time of QOLIE-31 and QOLIE-48, I check the QOLIE-31 and QOLIE-48 records in the Screening.  
+To figure out the question whether the Screening(Visit 0) is the first time of QOLIE-31 and QOLIE-48, I check the QOLIE-31 and QOLIE-48 records in the Screening.
 
 ```{r visit, echo = FALSE, message=FALSE, warning=FALSE}
 scr48 <- bs %>% filter(qolie_48_1117_v0_complete == "2")
@@ -131,7 +131,7 @@ visits48_all %>%
 
 ## Combination of all QOLIE
 
-Finally, we put all QOLIE records across Base Dataset and FollowUp Dataset together, called q31 and q48.  
+Finally, we put all QOLIE records across Base Dataset and FollowUp Dataset together, called q31 and q48.\
 To investigate the demographic of participants, we will also create a dataset called demo.
 
 ```{r qolie, echo=FALSE, warning = FALSE, message = FALSE}
