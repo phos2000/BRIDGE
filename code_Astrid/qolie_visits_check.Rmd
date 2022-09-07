@@ -381,6 +381,13 @@ Zilu confirmed in data that only participants who enrolled via follow-up have a 
 A question need to solve later for time series analysis. 
 
 ```{r baseline-date}
+tt <- fu %>% filter(redcap_repeat_instrument=="diag_enroll") %>% 
+  mutate(de_screen=as_date(date_of_consent_screen),
+         de_fu=as_date(dateconsentenroll)) %>% 
+  mutate(m1=as.integer(is.na(de_screen)),m2=as.integer(is.na(de_fu))) %>% 
+  mutate(date_baseline=as_date(ifelse(ev0==1,de_screen,de_fu)),
+         agefu=age)
+
 tt %>% select(starts_with("de_"),date_baseline) %>% summary()
 tt %>% mutate(dd=de_fu-de_screen) %>% pull(dd) %>% as.numeric() %>% summary()
 
@@ -414,7 +421,7 @@ cat("*age_elig_met=1 means age meets the criteria")
 #   kable(caption = "QOLIE 31 Visit 0: It happened to both screening and follow-up enrollees.")
 
 
-tm <- c31v0 %>% filter(age_calc0<=17) %>% select(record_id) %>% inner_join(qq) %>% distinct(record_id) %>% mutate(with_q48_record=1)
+tm <- c31v0 %>% filter(age_calc0<=17) %>% select(record_id) %>% inner_join(q31c) %>% distinct(record_id) %>% mutate(with_q48_record=1)
 
 tp <- c31v0 %>% filter(age_calc0<=17) %>% 
   select(record_id,study_arm,age_calc0) %>% 
@@ -437,7 +444,7 @@ cat("ZZ: Here I looked at age at baseline date for everyone in the dataset to se
 
 c31v1 <- q31c %>% filter(redcap_repeat_instance==2) %>% 
   select(record_id,study_arm,ev0,redcap_repeat_instance,
-         dateqolie31,qolie_31_17_v0_m2_m24_complete) %>%
+         dateqolie31,complete) %>%
   left_join(dob) %>% 
   mutate(date=as_date(dateqolie31),
          age_calc1=as.numeric((date-bd)/365.25)) %>% 
@@ -448,7 +455,7 @@ c31v1 %>% mutate(age_elig_met=as.integer(age_calc1>17)) %>%
   kable(caption = "QOLIE 31 Visit 1") %>% 
   kable_styling()
 
-tm <- c31v1 %>% filter(age_calc1<=17) %>% select(record_id) %>% inner_join(qq) %>% distinct(record_id) %>% mutate(with_q48_record=1)
+tm <- c31v1 %>% filter(age_calc1<=17) %>% select(record_id) %>% inner_join(q31c) %>% distinct(record_id) %>% mutate(with_q48_record=1)
 tp <- c31v1 %>% filter(age_calc1<=17) %>% 
   select(record_id,study_arm,age_calc1) %>% 
   left_join(tm) %>% replace_na(list(with_q48_record=0)) 
@@ -472,7 +479,7 @@ cat("These participants should theorectically have filled QOLIE 31 at that visit
 fudwx %>% filter(age_3>17) %>% distinct(record_id) %>%
   left_join(c31v1 %>% distinct(record_id,hr=1)) %>%
   filter(is.na(hr)) %>%
-  left_join(qq2) %>% count(redcap_repeat_instance) %>% filter(redcap_repeat_instance==1) %>% pull(n) %>% 
+  left_join(q31c) %>% count(redcap_repeat_instance) %>% filter(redcap_repeat_instance==1) %>% pull(n) %>% 
   cat(.," of these participants had a baseline record, but no month 2 record.\n\n")
 
 
@@ -487,9 +494,20 @@ age31 <- q31c %>%
          age_calc=as.numeric((date-bd)/365.25)) %>%
   mutate(age_elig_met=as.integer(age_calc>17))
 
-ggplot(age31,aes(age_calc)) +
-  geom_histogram()
+age31 %>% count(study_arm,age_elig_met, redcap_repeat_instance) %>%
+  ungroup() %>%
+  group_by(study_arm, redcap_repeat_instance) %>%
+  mutate(pct = percent(n / sum(n))) %>%
+  filter(age_elig_met == 1) %>%
+  select(-age_elig_met) %>%
+  kable(caption = "QOLIE 31 age eligble rate (child > 17) \n\n") %>% 
+  kable_styling()
 
+cat("the only child get QOLIE-31 during Screening, didn't meet the age criteria at that time. \n\n
+    So finally, we should delete that record.\n\n")
+
+ggplot(age31,aes(age_calc)) +
+  geom_histogram(binwidth = 1)
 ```
 
 ```{r q48-age_distribution}
@@ -499,8 +517,26 @@ age48 <- q48c %>%
          age_calc=as.numeric((date-bd)/365.25)) %>%
   mutate(age_elig_met=as.integer(age_calc<=17, age_calc >= 11))
 
+age48 %>% 
+  count(study_arm, redcap_repeat_instance, age_elig_met) %>%
+  ungroup() %>%
+  group_by(study_arm, redcap_repeat_instance) %>%
+  mutate(pct = percent(n / sum(n))) %>%
+  filter(age_elig_met == 1) %>%
+  select(-age_elig_met) %>%
+  kable(caption = "QOLIE-AD-48 age eligible rate (age between 11-17)") %>%
+  kable_styling()
+
 ggplot(age48,aes(age_calc)) +
   geom_histogram()
+
+# for those not eligible, how many times of QOLIE-AD-48 they have?
+age48 %>%
+  left_join(age31 %>% select(record_id, redcap_repeat_instance, age_elig_met), by = "record_id", suffix = c("_q48", "_q31")) %>%
+  filter(age_elig_met_q31 != 1) %>%
+  count(study_arm, redcap_repeat_instance_q48, age_elig_met_q48) %>%
+  kable(caption = "should not use QOLIE-31") %>%
+  kable_styling()
 ```
 
 
@@ -573,11 +609,20 @@ cat('ZZ:Need to think about what should be the real "baseline".')
 
 ```
 
+## Combination of QOLIE records
 
 ```{r qolie-pattern}
 # if age changes, a chw may use QOLIE-31 first and then QOLIE-48. 
 # visit pattern. combined
-qc = full_join(q31c, q48c)
+qc = full_join(age31, age48)
+
+qc %>% filter(age_elig_met != 0) %>%
+  count(study_arm, record_id) %>%
+  rename(times_qolie = n) %>%
+  count(study_arm, times_qolie) %>%
+  kable(caption = "for all age eligible cases, the times of QOLIE") %>%
+  kable_styling()
+
 patternc <- qc %>%
   distinct(record_id,visit=redcap_repeat_instance,study_arm) %>%
   # there are some overlapping
