@@ -137,7 +137,6 @@ fcf1 %>% filter(redcap_repeat_instrument=="follow_up_care_form", qolie == 50) %>
 
 #missed_fu var
 fcf1 %>% 
-  filter(follow_up_care_form_complete==2) %>%
   count(missed_fu, sort = TRUE) %>%
   transmute(missed_fu, freq = n, pct = percent(freq / sum(freq))) %>%
   kable(caption = "missed_fu for all fcf",
@@ -149,6 +148,9 @@ fcf1 %>%
 ```
 
 I found some responses meaning not missing, and I picked them out:
+
+| Missed_fu | n_records | n_participants | n
+
 
 -   "No",
 -   "No missed",
@@ -163,8 +165,8 @@ I found some responses meaning not missing, and I picked them out:
 -   "0",
 -   "On time"
 
-For the NA(blank answers) and "Visit Done", we have no reasons to set them all as missing(Impossible with such a big number) or not missing(if they're just incomplete?).\
-I use the important indices below to distinguish whether they are actually missing or not.
+For the NA(blank answers) and "Visit Done", we have no reasons to set them all as missing or not missing.\
+So I use the important indices below to distinguish whether they are actually missing or not.
 
 ```{r check3, eval=TRUE, message=FALSE, warning=FALSE}
 # set a few answers as the complete cases
@@ -191,6 +193,17 @@ fcf2 %>%
   mutate(pct=percent(missed_num_fcf/n_record_fcf)) %>% 
   kable(caption = "Missing rate among all visits") %>% 
   kable_styling() %>% 
+  scroll_box(height = "400px")
+
+cat("Show the inclusive conditions after deleting missing cases\n\n")
+
+fcf2 %>%
+  filter(missed == 0) %>%
+  count(incomplete, missed_fu,sort = TRUE) %>%
+  left_join(fcf2 %>% count(missed_fu), by = c("missed_fu"), suffix = c("_inclusive", "_in_and_ex")) %>%
+  mutate(pct = percent(n_inclusive / n_in_and_ex)) %>%
+  kable(caption = "incomplete = 0 means completing all the key questions") %>%
+  kable_styling() %>%
   scroll_box(height = "400px")
 ```
 

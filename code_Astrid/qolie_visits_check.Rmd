@@ -76,9 +76,8 @@ q31_scr = bs %>% filter(qolie_31_17_v0_complete == "2") %>%
   mutate(form = "Screening")
 
 q31_scr %>%
-  kable(caption = "There's only 1 completed records for QOLIE-31 in BaseDat") %>%
-  kable_styling() %>%
-  scroll_box()
+  kable(caption = "There's only 1 completed records for QOLIE-31 in BaseDat") %>% 
+  kable_styling()
 
 q31 = rbind.data.frame(q31_scr, q31_fu)
 
@@ -102,8 +101,8 @@ q48 = rbind.data.frame(q48_scr, q48_fu)
 | QOLIE-31 | `r count(q31_scr %>% count(record_id))` | `r count(q31_fu %>% count(record_id))` | `r count(q31 %>% count(record_id))` |
 | QOLIE-48 | `r count(q48_scr %>% count(record_id))` | `r count(q48_fu %>% count(record_id))` | `r count(q48 %>% count(record_id))` |
 
-As most of Screening responses don't include QOLIE-31, we will look for all the 3 times of QOLIE-31 during follow-up visits.\
-For the only QOLIE-31 response in Screening, the participants have three other completed QOLIE-48 records.
+Screening responses were reasonable not to include QOLIE-31, as our participants were adolescent at least when screening .\
+For the only QOLIE-31 response in Screening, the age is not eligible and the participant had three other completed QOLIE-48 records.
 
 ```{r check-N}
 
@@ -402,91 +401,6 @@ cat("Not sure which date to use as baseline, missingness could be an issue")
 
 ## QOLIE-31 should be >= 18
 
-```{r q31-age}
-c31v0 <- q31c %>% filter(redcap_repeat_instance==1) %>% 
-  select(record_id,study_arm,ev0,redcap_repeat_instance,
-         dateqolie31,complete) %>%
-  left_join(dob) %>% 
-  mutate(date=as_date(dateqolie31),
-         age_calc0=as.numeric((date-bd)/365.25)) %>% 
-  left_join(q31c %>% select(record_id,redcap_repeat_instance)) 
-
-c31v0 %>% mutate(age_elig_met=as.integer(age_calc0>17)) %>% count(study_arm,age_elig_met) %>%
-  kable(caption = "QOLIE 31 Visit 0\n\n") %>% 
-  kable_styling()
-cat("*age_elig_met=1 means age meets the criteria")
-
-
-# c31v0 %>% mutate(age_elig_met=as.integer(age_calc0>17)) %>% count(ev0,age_elig_met) %>%
-#   kable(caption = "QOLIE 31 Visit 0: It happened to both screening and follow-up enrollees.")
-
-
-tm <- c31v0 %>% filter(age_calc0<=17) %>% select(record_id) %>% inner_join(q31c) %>% distinct(record_id) %>% mutate(with_q48_record=1)
-
-tp <- c31v0 %>% filter(age_calc0<=17) %>% 
-  select(record_id,study_arm,age_calc0) %>% 
-  left_join(tm) %>% replace_na(list(with_q48_record=0)) 
-
-tp %>% 
-  kable(row.names=T,caption = "QOLIE 31 Visit 0: age criteria not met, many are close to 17") %>% 
-  kable_styling() %>% 
-  scroll_box(width = "100%",height = "400px")
-cat("*age_calc0 is the baseline age calculated from date of birth and qolie date.\n\n")
-cat("with_q48_record=1 means the participants have QOLIE 48 records found\n")
-cat(paste0("ZZ: ",sum(tp$with_q48_record)," of those ",nrow(tp)," children have QOLIE 48 records, which might suggest the issue was later corrected by staff. Should we just exclude those records?\n\n"))
-
-#denom
-fudwx %>% filter(age_calc0>17) %>% nrow() %>% paste0(.,"\n\n") %>% cat("Number of participants age over 17 at baseline date:",.)
-
-cat("ZZ: Here I looked at age at baseline date for everyone in the dataset to see theoretically how many records we should expect. However, the actual date could be very different and in case of delay may have underestimated the denominator.")
-
-
-
-c31v1 <- q31c %>% filter(redcap_repeat_instance==2) %>% 
-  select(record_id,study_arm,ev0,redcap_repeat_instance,
-         dateqolie31,complete) %>%
-  left_join(dob) %>% 
-  mutate(date=as_date(dateqolie31),
-         age_calc1=as.numeric((date-bd)/365.25)) %>% 
-  left_join(q31c %>% select(record_id,redcap_repeat_instance))
-
-c31v1 %>% mutate(age_elig_met=as.integer(age_calc1>17)) %>% 
-  count(study_arm,age_elig_met) %>%
-  kable(caption = "QOLIE 31 Visit 1") %>% 
-  kable_styling()
-
-tm <- c31v1 %>% filter(age_calc1<=17) %>% select(record_id) %>% inner_join(q31c) %>% distinct(record_id) %>% mutate(with_q48_record=1)
-tp <- c31v1 %>% filter(age_calc1<=17) %>% 
-  select(record_id,study_arm,age_calc1) %>% 
-  left_join(tm) %>% replace_na(list(with_q48_record=0)) 
-
-tp%>% 
-  kable(row.names=T,caption = "QOLIE 31 Visit 1: age criteria not met, about half are close to 17") %>% 
-  kable_styling() %>% 
-  scroll_box(width = "100%",height = "400px")
-
-cat("with_q48_record=1 means the participants have QOLIE 48 records found\n")
-cat(paste0("ZZ: ",sum(tp$with_q48_record)," of those ",nrow(tp)," children have QOLIE 48 records, which might suggest the issue was later corrected by staff. Should we just exclude those records?\n\n"))
-# c31v0 %>% filter(age_3<=17) %>% distinct(record_id) %>% nrow()
-# c31v0 %>% filter(age_3<=17) %>% select(record_id) %>% left_join(qq) %>% distinct(record_id) %>% nrow()
-
-
-#denom
-fudwx %>% filter(age_3>17) %>% nrow() %>% paste0(.,"\n") %>% cat("Number of participants age over 17 at v1 (age at instance 3 from follow up care form:",.)
-
-cat("These participants should theorectically have filled QOLIE 31 at that visit but did not have a record.")
-
-fudwx %>% filter(age_3>17) %>% distinct(record_id) %>%
-  left_join(c31v1 %>% distinct(record_id,hr=1)) %>%
-  filter(is.na(hr)) %>%
-  left_join(q31c) %>% count(redcap_repeat_instance) %>% filter(redcap_repeat_instance==1) %>% pull(n) %>% 
-  cat(.," of these participants had a baseline record, but no month 2 record.\n\n")
-
-
-e1 <- c31v0 %>% filter(age_calc0>17)
-e2 <- c31v1 %>% filter(age_calc1>17)
-```
-
 ```{r q31-age_distribution}
 age31 <- q31c %>%
   left_join(dob) %>% 
@@ -509,6 +423,8 @@ cat("the only child get QOLIE-31 during Screening, didn't meet the age criteria 
 ggplot(age31,aes(age_calc)) +
   geom_histogram(binwidth = 1)
 ```
+
+## QOLIE-48 should be 11-17
 
 ```{r q48-age_distribution}
 age48 <- q48c %>%
@@ -539,77 +455,9 @@ age48 %>%
   kable_styling()
 ```
 
-
-## QOLIE-48 should be 11-17
-
-```{r q48-age}
-#whether qolie 48 are age between 11 and 17
-c48v0 <- q48c %>% filter(redcap_repeat_instance==1) %>% 
-  select(record_id,study_arm,ev0,redcap_repeat_instance,
-         dateqolie48,complete) %>%
-  left_join(dob) %>% 
-  mutate(date=as_date(dateqolie48),
-         age_calc0=as.numeric((date-bd)/365.25)) %>% 
-  left_join(q48c %>% select(record_id,redcap_repeat_instance)) 
-
-
-c48v0 %>% mutate(age_elig_met=as.integer(age_calc0<=17,age_calc0>=11)) %>% count(study_arm,age_elig_met) %>%
-  kable(caption = "QOLIE 48 Visit 0: almost all records meet age criteria [11,17]") %>% 
-  kable_styling()
-cat("*age_elig_met=1 means age meets the criteria")
-
-#denom 
-td <- fudwx %>% filter(age_calc0<=17,age_calc0>=11)
-td %>% 
-  left_join(q48c %>% filter(redcap_repeat_instance==1) %>% 
-              select(record_id,study_arm) %>% 
-              mutate(with_q48_v0=1)) %>%
-  left_join(q48c %>% distinct(record_id,study_arm) %>% 
-              mutate(with_any_q48=1)) %>%
-  replace_na(list(with_q48_v0=0,with_any_q48=0)) %>% 
-  group_by(study_arm) %>% 
-  summarise(with_q48_v0=sum(with_q48_v0),
-            pct_q48_v0=percent(sum(with_q48_v0)/n()),
-            with_any_q48=sum(with_any_q48),
-            pct_any_q48=percent(sum(with_any_q48)/n())) %>% 
-  kable(caption = "Among participants between 11 and 17 at baseline date") %>% kable_styling()
-
-cat("with_q48_v0 means number of participants with an instance 1 QOLIE-48 record,\n
-    with_any_q48 means number of partcipants with any records (instance 1/2/3).\n\n")
-cat("The visit pattern shows that a number of participants started to contribute  from instance 2, which echos the table above showing over 90% of participants who were eligble at baseline turned out having any QOLIE-48 records and less than 75% showed up as v0.")
-
-c48v1 <- q48c %>% filter(redcap_repeat_instance==2) %>% 
-  select(record_id,study_arm,ev0,redcap_repeat_instance,
-         dateqolie48,complete) %>%
-  left_join(dob) %>% 
-  mutate(date=as_date(dateqolie48),
-         age_calc1=as.numeric((date-bd)/365.25)) %>% 
-  left_join(q48c %>% select(record_id,redcap_repeat_instance)) 
-
-c48v1 %>% mutate(age_elig_met=as.integer(age_calc1<=17,age_calc1>=11)) %>% count(study_arm,age_elig_met) %>%
-  kable(caption = "QOLIE 48 Visit 1: most records meet age criteria [11,17]") %>% 
-  kable_styling()
-cat("*age_elig_met=1 means age meets the criteria")
-
-#denom
-# fudwx %>% filter(age_3<=17,age_3>=11) %>% 
-#   left_join(qq %>% filter(redcap_repeat_instance==2) %>% 
-#               select(record_id,study_arm,ev0) %>% 
-#               mutate(with_q48_v1=1)) %>%
-#   replace_na(list(with_q48_v1=0)) %>% 
-#   count(study_arm,with_q48_v1) %>%  
-#   group_by(study_arm) %>% mutate(pct=percent(n/sum(n))) %>% 
-#   kable(caption = "Among participants between 11 and 17 at 2-month follow up") %>% 
-#   kable_styling()
-
-cat("More participants contributed to v1 (2-month follow-up) than to v0.\n\n")
-cat("ZZ: Here I looked at age at 2 month follow up visit for everyone in the dataset to see theoretically how many records we should expect. However, the actual date could be very different as the visit pattern already shows that a number of participants started to contribute records from instance 2, and no subsequent record.")
-cat("ZZ: A number of children who should be eligible for QOLIE-48 at baseline (based on dob and baseline date) did not have any records for baseline. Any explanation?\n\n")
-cat('ZZ:Need to think about what should be the real "baseline".')
-
-```
-
 ## Combination of QOLIE records
+
+After deleting the cases whose ages were not eligible, we replot the visit pattern. 
 
 ```{r qolie-pattern}
 # if age changes, a chw may use QOLIE-31 first and then QOLIE-48. 
