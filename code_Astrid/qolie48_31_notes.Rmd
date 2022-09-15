@@ -1,5 +1,5 @@
 ---
-title: "QOLIE-31/QOLIE-AD-48 redo"
+title: "QOLIE-31/QOLIE-AD-48 Timeline, Scores, and Hypothesis Tests"
 date: "`r Sys.Date()`"
 author: "Astrid"
 output: 
@@ -19,7 +19,7 @@ library(lubridate)
 library(kableExtra)
 ```
 
-## Source Data
+# Source Data
 
 -   BRIDGE follow-up QOLIE 31 & 48 dataset for all sites. Data in this version was pulled on 8/8/2022.
 
@@ -28,8 +28,20 @@ fu <- data.table::fread("../data/FollowDat.csv")
 load("original_qolie.rda")
 ```
 
+- age(dob), 
+- gender,
+- sites,
+- seizure_class.
 
-## QOLIE-31
+```{r info}
+gender <- fu %>% filter(!is.na(gender)) %>% distinct(record_id,gender,study_arm)
+location <- fu %>% filter(!is.na(city)) %>% distinct(record_id,city,study_arm)
+dob <- fu %>% mutate(bd=as_date(dob)) %>% filter(!is.na(bd)) %>% distinct(record_id,study_arm,bd)
+# changes over time
+# seizure <- fu %>% filter(!is.na(seizeclass)) %>% distinct(record_id,study_arm,seizeclass)
+```
+
+# QOLIE-31
 
 Please refer to qolie31_survey.pdf and qolie31_scoring.pdf for original scale details.
 
@@ -249,8 +261,10 @@ score_q31 <- function(df) {
 
 ```
 
+## QOLIE-31 missing regions check
+
 ```{r r1}
-r31 <-  score_q31(q31) 
+r31 <-  score_q31(q31c) 
 
 #count missing
 r31x <- r31 %>% rowwise() %>% 
@@ -405,7 +419,17 @@ o3 %>% kable(caption = "QOLIE-48 Split up follow-up and gender") %>%
 
 ```
 
-## QOLIE-AD-48
+## QOLIE 31 Hypothesis Testing
+```{r qolie31-hypothesis-testing}
+q31info = r31 %>% left_join(gender) %>% left_join(dob) %>% left_join(location)
+
+summary(lm(overall ~ factor(study_arm) + factor(redcap_repeat_instance) + factor(study_arm):factor(redcap_repeat_instance), q31info))
+summary(lm(overall ~ factor(study_arm) + factor(redcap_repeat_instance) + factor(gender), q31info))
+summary(lm(overall ~ factor(study_arm) + factor(redcap_repeat_instance) + factor(city), q31info))
+summary(lm(overall ~ factor(study_arm) + factor(redcap_repeat_instance) + factor(dob), q31info))
+```
+
+# QOLIE-AD-48
 
 Please refer to Cramer 1999 QOLIE-AD-48.pdf for original scale details.
 
@@ -437,17 +461,19 @@ One more question: there's two 27 in Cramer(1999), based on the context, which s
 
 ```{r q48}
 xwalk <- readxl::read_xlsx("../code_Astrid/qolie48_xwalk.xlsx")
-q48 <- fu %>% filter(redcap_repeat_instrument=="qolie_48_1117_v0_m2_m24") %>% 
-  select(record_id,study_arm,starts_with("red"),starts_with("qolie48_"))
 
-vv = data.frame(vn_redcap=names(q48),x=1:length(names(q48)),stringsAsFactors = F) %>%
+vv = data.frame(vn_redcap=names(q48c),x=1:length(names(q48c)),stringsAsFactors = F) %>%
   left_join(xwalk, by = "vn_redcap") 
 # there will be NA
 
 #rename survey question to align with original questionnaire
 for(i in 1:nrow(vv)) {
-  names(q48)[which(names(q48)==vv$vn_redcap[i])] <- vv$vn_Cramer[i]
+  if (is.na(vv$vn_Cramer[i])) {
+    vv$vn_Cramer[i] = vv$vn_redcap[i]
+  }
 }
+
+names(q48c) = vv$vn_Cramer
 
 # score for questions that have 5-point
 sc5 <- function(dt,vf,vt) {
@@ -565,8 +591,8 @@ score_q48 <- function(df) {
 
 ```{r r2}
 
-r48p <- score_q48(q48) 
-r48 <- bind_cols(q48,r48p)
+r48p <- score_q48(q48c) 
+r48 <- bind_cols(q48c,r48p)
 
 #count missing
 r48x <- r48 %>% rowwise() %>% 
@@ -576,14 +602,7 @@ r48x <- r48 %>% rowwise() %>%
 
 save(r48x,r31x,file="re_qolie.rda")
 
-
-ggplot(data=r48x) + 
-  geom_histogram(aes(x=miss_item),binwidth = 1) +
-  facet_grid(study_arm~.) +
-  theme_minimal() +
-  xlab("Number of missing item") + ylab("Freq") +
-  ggtitle("Missing any of the 46(48) questions in QOLIE-48")
-
+r48x %>% kable() %>% kable_styling()
 
 t48 <- r48x %>% mutate(miss_any_item=as.integer(miss_item>0),
                        miss_any_domain=as.integer(miss_domain>0),
@@ -638,8 +657,6 @@ ggplot(r48) + geom_boxplot(aes(x=study_arm,y=overall)) +
 # r31 %>% filter(study_arm=="TSC") %>% 
 #   select(starts_with("sum"),overall) %>% summary() %>% 
 #   kable(caption = "QOLIE-31 - TSC")
-
-
 
 
 ```
@@ -741,6 +758,68 @@ o3 <- full_join(s1y,s2y) %>%
 
 o3 %>% kable(caption = "QOLIE-48 Split up follow-up and gender") %>% 
   kable_styling()
+
+```
+
+## QOLIE-AD-48 Hypothesis Testing
+```{r q48-hypothesis-testing}
+q48info = r48 %>% left_join(gender) %>% left_join(dob) %>% left_join(location)
+
+t_res = t.test(
+  overall ~ factor(study_arm),
+  data = q48info,
+  var.equal = TRUE
+)
+# I'm thinking about diff-in-diff
+summary(lm(overall ~ factor(study_arm) + factor(redcap_repeat_instance) + factor(study_arm):factor(redcap_repeat_instance), q48info))
+summary(lm(overall ~ factor(study_arm) + factor(redcap_repeat_instance) + factor(gender), q48info))
+summary(lm(overall ~ factor(study_arm) + factor(redcap_repeat_instance) + factor(city), q48info))
+summary(lm(overall ~ factor(study_arm) + factor(redcap_repeat_instance) + factor(dob), q48info))
+
+```
+
+# Whole Timeline
+for every record id, put all the records together
+
+## Baseline date
+
+Zilu learnt from Lizet that participants could "enroll" through either the screening or the follow up project. If ev0=1 (screening) then use date_consent_screen, if ev0=0 (follow-up) then dataconsentenroll.
+
+Zilu confirmed in data that only participants who enrolled via follow-up have a dateconsentenroll value (a handful of missing date). In most cases, the consent enroll date is about a week after consent screening date.
+
+A question need to solve later for time series analysis. 
+
+```{r baseline-date}
+tt <- fu %>% filter(redcap_repeat_instrument=="diag_enroll") %>% 
+  mutate(de_screen=as_date(date_of_consent_screen),
+         de_fu=as_date(dateconsentenroll)) %>% 
+  mutate(m1=as.integer(is.na(de_screen)),m2=as.integer(is.na(de_fu))) %>% 
+  mutate(date_baseline=as_date(ifelse(ev0==1,de_screen,de_fu)),
+         agefu=age)
+
+tt %>% select(starts_with("de_"),date_baseline) %>% summary()
+tt %>% mutate(dd=de_fu-de_screen) %>% pull(dd) %>% as.numeric() %>% summary()
+
+fub <- fu %>% filter(redcap_repeat_instrument=="diag_enroll") %>%
+  select(record_id,study_arm,ev0,starts_with("date")) %>%
+  mutate_at(vars(starts_with("date")),as_date)
+# datefu
+# dateassentenroll, dataconsentenroll, which date used as baseline
+fub %>% select(starts_with("date")) %>% summary()
+cat("Not sure which date to use as baseline, missingness could be an issue")
+
+basedate = fub %>% 
+  mutate(datebaseline = as_date(ifelse(ev0 == 1, date_of_consent_screen, dateconsentenroll))) %>% 
+  select(record_id, study_arm, ev0, datebaseline)
+```
+
+## Instance 0 (Screening)
+
+```{r}
+q48_scr %>% left_join(basedate) %>% mutate(datediff = difftime(dateqolie48, datebaseline, units= "days")) %>% count(ev0, datediff) # mostly ev0 == 1(Screening), consistent with scr
+
+q48_fu %>% filter(redcap_repeat_instance == 1) %>% left_join(basedate) %>% mutate(datediff = difftime(dateqolie48, datebaseline, units= "days")) %>% count(ev0,datediff) %>% group_by(ev0) %>% mutate(n_sum = sum(n)) %>% kable()
+
 
 ```
 

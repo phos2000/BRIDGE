@@ -219,7 +219,7 @@ cat("later we will take the age change into consideration")
 
 ### Missing item
 
-Actually, the number of missing items is more reliable for defining missing cases. So we use miss_item \> **50%** to delete some cases.
+Actually, the number of missing items is more reliable for defining missing cases. So we use miss_item \> **20%** to delete some cases.
 
 ```{r q31-missing-item}
 q31m = q31 %>% rowwise() %>% 
@@ -232,7 +232,7 @@ ggplot(data=q31m) +
   xlab("Number of missing item") + ylab("Freq") +
   ggtitle("Missing any of the 30 questions in QOLIE-31")
 
-q31c = q31m %>% filter(miss_item <= 15)
+q31c = q31m %>% filter(miss_item <= 6)
 ```
 
 ```{r q48-missing-item}
@@ -246,7 +246,7 @@ ggplot(data=q48m) +
   xlab("Number of missing item") + ylab("Freq") +
   ggtitle("Missing any of the 49 questions in QOLIE-48")
 
-q48c = q48m %>% filter(miss_item <= 24)
+q48c = q48m %>% filter(miss_item <= 10)
 ```
 
 ### Missing pattern
@@ -369,34 +369,6 @@ fudwx <- fudw %>% left_join(dob) %>%
          age_calc9=as.numeric((date_9-bd)/365.25),
          age_calc10=as.numeric((date_10-bd)/365.25)
   )
-```
-
-## Baseline date
-
-Zilu learnt from Lizet that participants could "enroll" through either the screening or the follow up project. If ev0=1 (screening) then use date_consent_screen, if ev0=0 (follow-up) then dataconsentenroll.
-
-Zilu confirmed in data that only participants who enrolled via follow-up have a dateconsentenroll value (a handful of missing date). In most cases, the consent enroll date is about a week after consent screening date.
-
-A question need to solve later for time series analysis. 
-
-```{r baseline-date}
-tt <- fu %>% filter(redcap_repeat_instrument=="diag_enroll") %>% 
-  mutate(de_screen=as_date(date_of_consent_screen),
-         de_fu=as_date(dateconsentenroll)) %>% 
-  mutate(m1=as.integer(is.na(de_screen)),m2=as.integer(is.na(de_fu))) %>% 
-  mutate(date_baseline=as_date(ifelse(ev0==1,de_screen,de_fu)),
-         agefu=age)
-
-tt %>% select(starts_with("de_"),date_baseline) %>% summary()
-tt %>% mutate(dd=de_fu-de_screen) %>% pull(dd) %>% as.numeric() %>% summary()
-
-fub <- fu %>% filter(redcap_repeat_instrument=="diag_enroll") %>%
-  select(record_id,study_arm,starts_with("date")) %>%
-  mutate_at(vars(starts_with("date")),as_date)
-# datefu
-# dateassentenroll, dataconsentenroll, which date used as baseline
-fub %>% select(starts_with("date")) %>% summary()
-cat("Not sure which date to use as baseline, missingness could be an issue")
 ```
 
 ## QOLIE-31 should be >= 18
