@@ -21,17 +21,15 @@ library(kableExtra)
 
 # Source Data
 
--   BRIDGE follow-up QOLIE 31 & 48 dataset for all sites. Data in this version was pulled on 8/8/2022.
+BRIDGE follow-up QOLIE 31 & 48 dataset for all sites. Data in this version was pulled on 8/8/2022.
 
 ```{r data, echo=FALSE}
 fu <- data.table::fread("../data/FollowDat.csv")
 load("original_qolie.rda")
 ```
 
-- age(dob), 
-- gender,
-- sites,
-- seizure_class.
+Info used later:\
+- age(dob), - gender, - sites.
 
 ```{r info}
 gender <- fu %>% filter(!is.na(gender)) %>% distinct(record_id,gender,study_arm)
@@ -420,13 +418,16 @@ o3 %>% kable(caption = "QOLIE-48 Split up follow-up and gender") %>%
 ```
 
 ## QOLIE 31 Hypothesis Testing
+
+The records separately for every id are not enough.
+
 ```{r qolie31-hypothesis-testing}
 q31info = r31 %>% left_join(gender) %>% left_join(dob) %>% left_join(location)
 
 summary(lm(overall ~ factor(study_arm) + factor(redcap_repeat_instance) + factor(study_arm):factor(redcap_repeat_instance), q31info))
 summary(lm(overall ~ factor(study_arm) + factor(redcap_repeat_instance) + factor(gender), q31info))
 summary(lm(overall ~ factor(study_arm) + factor(redcap_repeat_instance) + factor(city), q31info))
-summary(lm(overall ~ factor(study_arm) + factor(redcap_repeat_instance) + factor(dob), q31info))
+# summary(lm(overall ~ factor(study_arm) + factor(redcap_repeat_instance) + factor(dob), q31info))
 ```
 
 # QOLIE-AD-48
@@ -589,6 +590,8 @@ score_q48 <- function(df) {
 
 ```
 
+## QOLIE-48 missing regions check
+
 ```{r r2}
 
 r48p <- score_q48(q48c) 
@@ -601,8 +604,6 @@ r48x <- r48 %>% rowwise() %>%
 
 
 save(r48x,r31x,file="re_qolie.rda")
-
-r48x %>% kable() %>% kable_styling()
 
 t48 <- r48x %>% mutate(miss_any_item=as.integer(miss_item>0),
                        miss_any_domain=as.integer(miss_domain>0),
@@ -649,7 +650,7 @@ r48x %>% mutate(domain=as.integer(miss_domain>0),
 
 ggplot(r48) + geom_boxplot(aes(x=study_arm,y=overall)) +
   coord_flip() + theme_minimal() + 
-  ggtitle("Distribution of Qolie 31 Overall Score")
+  ggtitle("Distribution of Qolie 48 Overall Score")
 
 # r31 %>% filter(study_arm=="EUC") %>% 
 #   select(starts_with("sum"),overall) %>% summary() %>% 
@@ -762,6 +763,9 @@ o3 %>% kable(caption = "QOLIE-48 Split up follow-up and gender") %>%
 ```
 
 ## QOLIE-AD-48 Hypothesis Testing
+
+Focus on the interaction of study arm and instances.
+
 ```{r q48-hypothesis-testing}
 q48info = r48 %>% left_join(gender) %>% left_join(dob) %>% left_join(location)
 
@@ -774,11 +778,12 @@ t_res = t.test(
 summary(lm(overall ~ factor(study_arm) + factor(redcap_repeat_instance) + factor(study_arm):factor(redcap_repeat_instance), q48info))
 summary(lm(overall ~ factor(study_arm) + factor(redcap_repeat_instance) + factor(gender), q48info))
 summary(lm(overall ~ factor(study_arm) + factor(redcap_repeat_instance) + factor(city), q48info))
-summary(lm(overall ~ factor(study_arm) + factor(redcap_repeat_instance) + factor(dob), q48info))
+# summary(lm(overall ~ factor(study_arm) + factor(redcap_repeat_instance) + factor(dob), q48info))
 
 ```
 
 # Whole Timeline
+
 for every record id, put all the records together
 
 ## Baseline date
@@ -787,7 +792,7 @@ Zilu learnt from Lizet that participants could "enroll" through either the scree
 
 Zilu confirmed in data that only participants who enrolled via follow-up have a dateconsentenroll value (a handful of missing date). In most cases, the consent enroll date is about a week after consent screening date.
 
-A question need to solve later for time series analysis. 
+A question need to solve later for time series analysis.
 
 ```{r baseline-date}
 tt <- fu %>% filter(redcap_repeat_instrument=="diag_enroll") %>% 
@@ -813,83 +818,66 @@ basedate = fub %>%
   select(record_id, study_arm, ev0, datebaseline)
 ```
 
-## Instance 0 (Screening)
+## Try to look into all the qolie times for every participant
 
 ```{r}
-q48_scr %>% left_join(basedate) %>% mutate(datediff = difftime(dateqolie48, datebaseline, units= "days")) %>% count(ev0, datediff) # mostly ev0 == 1(Screening), consistent with scr
+q48_scr %>% left_join(basedate) %>% mutate(datediff = difftime(dateqolie48, datebaseline, units= "days")) %>% count(ev0, datediff) %>% # mostly ev0 == 1(Screening), consistent with scr
+  kable(caption = "difference between baseline date and Screening QOLIE-48 Date") %>%
+  kable_styling() %>%
+  scroll_box(height = "400px")
+  
+q48_fu %>% filter(redcap_repeat_instance == 1) %>% left_join(basedate) %>% mutate(datediff = difftime(dateqolie48, datebaseline, units= "days")) %>% count(ev0,datediff) %>% group_by(ev0) %>% mutate(n_sum = sum(n)) %>% 
+  kable(caption = "difference between baseline date and Instance 1 QOLIE-48 Date") %>%
+  kable_styling() %>%
+  scroll_box(height = "400px")
 
-q48_fu %>% filter(redcap_repeat_instance == 1) %>% left_join(basedate) %>% mutate(datediff = difftime(dateqolie48, datebaseline, units= "days")) %>% count(ev0,datediff) %>% group_by(ev0) %>% mutate(n_sum = sum(n)) %>% kable()
+# r31 %>% filter(redcap_repeat_instance == 1) %>% select(record_id, study_arm, dateqolie31, overall) %>%
+#   inner_join(r48 %>% filter(redcap_repeat_instance == 1) %>% select(record_id, study_arm, dateqolie48, overall), by = c("record_id", "study_arm"), suffix = c("_31", "_48"))
+# 
+# r31 %>% filter(redcap_repeat_instance == 2) %>% select(record_id, study_arm, dateqolie31, overall) %>%
+#   inner_join(r48 %>% filter(redcap_repeat_instance == 2) %>% select(record_id, study_arm, dateqolie48, overall), by = c("record_id", "study_arm"), suffix = c("_31", "_48"))
+# 
+# r31 %>% filter(redcap_repeat_instance == 3) %>% select(record_id, study_arm, dateqolie31, overall) %>%
+#   inner_join(r48 %>% filter(redcap_repeat_instance == 3) %>% select(record_id, study_arm, dateqolie48, overall), by = c("record_id", "study_arm"), suffix = c("_31", "_48"))
 
+
+#first try to get a melt
+allqolie = r48x %>% 
+              mutate(type = "QOLIE-AD-48", instance = redcap_repeat_instance) %>%
+              select(record_id, study_arm, ev0, dateqolie48, overall, type, instance, miss_item, miss_domain) %>% 
+              rename(dateqolie = dateqolie48, score = overall) %>%
+  full_join(r31x %>% 
+              mutate(type = "QOLIE-31", instance = redcap_repeat_instance) %>%
+              select(record_id, study_arm, ev0, dateqolie31, overall, type, instance, miss_item, miss_domain) %>% 
+              rename(dateqolie = dateqolie31, score = overall)) %>%
+  left_join(basedate, by = c("record_id", "study_arm", "ev0"))
+
+allqolie = allqolie %>% count(record_id, sort = TRUE) %>% rename(qolietimes = n) %>% left_join(allqolie) %>% 
+  select(record_id, study_arm, qolietimes, ev0, datebaseline, dateqolie, instance, type, score, miss_item, miss_domain)
+
+allqolie %>%
+  arrange(desc(qolietimes), dateqolie, desc(miss_domain), desc(miss_item)) %>%
+  kable(caption = "All qolie records with dates and scores") %>%
+  kable_styling() %>%
+  scroll_box(height = "400px")
+
+
+# pivot table
+# basedate %>% left_join(r48 %>% filter(redcap_repeat_instance == 0) %>% select(record_id, study_arm, ev0, dateqolie48, overall) %>% mutate(type_screen = "QOLIE-AD-48") %>% rename(dateqolie_screen = dateqolie48, score_screen = overall)) %>%
+#   left_join(r48 %>% filter(redcap_repeat_instance == 1) %>% select(record_id, study_arm, ev0, dateqolie48, overall) %>% mutate(type_followup1 = "QOLIE-AD-48") %>% rename(dateqolie_followup1 = dateqolie48, score_followup1 = overall)) %>%
+#   left_join(r48 %>% filter(redcap_repeat_instance == 2) %>% select(record_id, study_arm, ev0, dateqolie48, overall) %>% mutate(type_followup2 = "QOLIE-AD-48") %>% rename(dateqolie_followup2 = dateqolie48, score_followup2 = overall)) %>%
+#   left_join(r31 %>% filter(redcap_repeat_instance == 1) %>% select(record_id, study_arm, ev0, dateqolie31, overall) %>% mutate(type_followup2 = "QOLIE-31") %>% rename(dateqolie_followup2 = dateqolie31, score_followup1 = overall))
 
 ```
 
-## Age exclusion
+Next Step:\
 
-Please see check_age_exclusion.html for detailed results.\
-Most QOLIE-48 records meet age criteria.
+1.  for those with 2 times of QOLIE on the same date:
 
-**ZZ: As Lizet mentioned, some healthcare workers filled QOLIE-31 for some children who did not meet the age critaria then corrected with QOLIE-48 later and the dates could be messed up. For some participants, v1 was essentially the baseline, which makes analysis stratefied by instance variable less meaningful. We need to consider redefining baseline and how to compare data points over time.**
+    if one is QOLIE-AD-48, the other is QOLIE-31, choose the one consistent with the age;
 
-## Check time interval for QOLIE-48
+    if both are the same instruments, use the more completed one / the later one.
 
-```{r interval}
-f48 <- fu %>% filter(redcap_repeat_instrument=="qolie_48_1117_v0_m2_m24") %>%
-  select(record_id,visit=redcap_repeat_instance,study_arm,dateqolie48) %>%
-  mutate(value=1,date=as_date(dateqolie48)) %>% 
-  select(-dateqolie48) %>% 
-  pivot_wider(names_from = visit, names_prefix = "v", 
-              values_from = c(value,date)) %>% 
-  replace_na(list(value_v1=0,value_v2=0,value_v3=0)) %>% 
-  unite("fu_pattern",value_v1:value_v3,sep = "",remove = F) 
+2.  for every record id, sort all the scores by time.
 
-#unique missing pattern
-f48w <- f48 %>% count(study_arm,fu_pattern) %>% 
-  group_by(study_arm) %>% 
-  mutate(tot=sum(n)) %>% 
-  ungroup() %>% 
-  mutate(pct=n/tot,
-         lbl=paste0(n," (",percent(pct),")"))
-
-```
-
-Method: Among those who contributed more than one QOLIE 48 records, check the time interval between the two records. So if visit pattern is 110, then take the difference between instance 1 and instance 2. If the visit pattern is 011, then take the difference between instance 2 and instance 3. For those who have 3 records, check instance 1 and 2.
-
-```{r check}
-f48 %>% rowwise() %>% 
-  mutate(n_visit=sum(value_v1,value_v2,value_v3,na.rm = T)) %>% 
-  count(study_arm,n_visit) %>% 
-  kable(caption = "total number of records each participant contributes") %>% 
-  kable_styling()
-
-#look at interval between visit among those with more than 1 records
-f48d <- f48 %>% rowwise() %>% 
-  mutate(n_visit=sum(value_v1,value_v2,value_v3,na.rm = T)) %>% 
-  ungroup() %>% filter(n_visit>1) %>% 
-  mutate(int=ifelse(fu_pattern=="110",date_v2-date_v1,
-                    ifelse(fu_pattern=="011",date_v3-date_v2,date_v2-date_v1)))
-         
-
-
-f48d %>% ggplot(aes(x=study_arm,y=int)) +
-    geom_boxplot() + ylab("time interval") +
-    coord_flip() + theme_minimal() +
-  ggtitle("Time interval between 1st and 2nd QOLIE-48 records")
-
-f48d %>% ggplot(aes(x=int)) + 
-  geom_histogram(binwidth = 2) +
-  facet_grid(study_arm~.) +
-  theme_minimal() +
-  xlab("time") + ylab("Freq") +
-  ggtitle("Distribution of time interval between 1st and 2nd QOLIE-48 records (expected 56 days)")
-
-f48d %>% mutate(n_within14=ifelse(int>=56-14 & int<=56+14, 1,0)) %>% 
-  count(study_arm,n_within14) %>% 
-  kable(caption = "Time interval between 1st and 2nd records within 56 +/- 14 range") %>% 
-  kable_styling()
-
-cat("n_within14=1 means time interval falls within range, 0 means out of range.")
-
-         
-```
-
-Similar to what we have seen in VAS check, two thirds of participants have a reasonable time interval between two visits. Howerver, outliers can be problematic.
+3.  Check the time interval between 2 times of QOLIE.
