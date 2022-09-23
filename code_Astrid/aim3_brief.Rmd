@@ -1,0 +1,356 @@
+---
+title: "Going through VAS and Qolie"
+author: "Astrid"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+library(tidyverse)
+library(knitr)
+library(scales)
+library(lubridate)
+library(kableExtra)
+```
+
+# Analysis and Result Briefs
+
+```{r read-vas-data}
+fu <- data.table::fread("../data/FollowDat.csv")
+load("fcf_dates_wide.rda")
+```
+
+## QOLIE(QOLIE-31 & QOLIE-AD-48)
+
+### the Inclusion Criteria of QOLIE records
+
+
+**Source**
+
+1.  from both Screening and Follow up visits;
+
+2.  including both QOLIE-31 and QOLIE-AD-48.
+
+**Logic for selecting same-day QOLIE records**
+
+For every participant, if there exists 2 QOLIE records on the same day,
+
+1.  choose the one with type(QOLIE-31/QOLIE-AD-48) more eligible for the age(11-17 use QOLIE-AD-48, \>18 use QOLIE-31);
+
+2.  if the same QOLIE type, choose the one with less missing domain and less missing items;
+
+3.  if still the same, choose the one with bigger *instance*.
+
+**Logic for i-th QOLIE**
+
+For every participant,
+
+1.  the baseline date is obtained from *date_consent_screen* or *dataconsentenroll*, choosing one based on *ev0*;
+
+2.  0th QOLIE(**first**): the first occurence of QOLIE records, no matter whether the date is on or before or after the baseline date, and no matter whether the record is from Screening or Follow up Visits, except from one case: the date is after "2022-01-01";
+
+3.  3rd QOLIE(**last**): the last time of QOLIE records and the date is after "2022-01-01". For those who have only one time QOLIE record, if the date is after "2022-01-01", the record will be labeled as the 3-rd, as the participants are only old enough(\>11) for the last time of visits(maybe we can compare their previous VAS score and this time of QOLIE);
+
+4.  1st or 2nd: the ones between the 0th and 3rd. For participants with 4 times of QOLIE and participants with 2 times of after-"2022-01-01" QOLIE, the 2nd will be filled -- they could also be dropped as they are not so consistent with the schedule;
+
+5.  For the records with "NA" dates, the order will depend on the *instance*. I prefer to put them on the 2nd, as they might be dropped as the data includes too much noises.
+
+```{r load-qolie}
+load("original_qolie.rda")
+load("all_qolie_together.rda")
+```
+
+### Missing Rate for QOLIE
+
+#### Had QOLIE records / Should have QOLIE records
+
+Number of Participants with QOLIE records: `r nrow(allq %>% distinct(record_id))`
+
+Number of Participants being over 11 at lease once during visits: `r nrow(fu %>% filter(agefu > 11) %>% distinct(record_id))`
+
+There are `r nrow(allq %>% filter(eligibility == 'VAS') %>% distinct(record_id))` participants not old enough to use QOLIE (at least once), but indeed having QOLIE records.
+
+Number of Participants eligible to have and indeed having QOLIE records: `r nrow(allq %>% filter(type == eligibility) %>% distinct(record_id))`, rate is `r percent(nrow(allq %>% filter(type == eligibility) %>% distinct(record_id)) / nrow(fu %>% filter(agefu > 11) %>% distinct(record_id)))`
+
+#### How many times of QOLIE the participants have?
+
+```{r qolie-times}
+allq %>% count(record_id) %>% 
+  rename(times_of_qolie = n) %>% 
+  count(times_of_qolie) %>%
+  kable(caption = "times of QOLIE") %>%
+  kable_styling(full_width = F)
+  
+cat("order 0th is the first one, order 3th is the last one (2022) ")
+  
+allq %>% group_by(study_arm, order) %>% 
+  summarise(n_records = n(), mean_score = mean(score), sd_score = sd(score)) %>%
+  group_by(study_arm) %>%
+  mutate(pct_by_arm = percent(n_records / sum(n_records))) %>% 
+  ungroup() %>%
+  select(order, n_records, pct_by_arm, mean_score, sd_score) %>%
+  kable(caption="QOLIE records by order") %>% 
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover")) %>%
+  pack_rows("EUC",1,4) %>%
+  pack_rows("TSC",5,8)
+```
+
+#### Time distribution for QOLIE times
+
+```{r qolie-dates}
+allq %>%
+  group_by(order) %>%
+  ggplot(aes(x=dateqolie)) + 
+  geom_histogram(bins = 50) +
+  facet_grid(order~.) +
+  theme_minimal() +
+  xlab("QOLIE") + ylab("Freq") +
+  ggtitle("Histogram of QOLIE dates")
+
+```
+
+#### Complete Rate of the instruments
+
+```{r miss-item}
+allq %>% 
+  mutate(base = ifelse(type == 'QOLIE-AD-48', 47, 31), miss_item_p = (base - miss_item) / base, miss_item_pct = ifelse(miss_item_p == 1, '100%', ifelse(miss_item_p < 1 & miss_item_p >= 0.9, '90% - 99%', ifelse(miss_item_p < 0.9 & miss_item_p >= 0.8, '80% - 89%', 'below 80%')))) %>%
+  count(study_arm, miss_item_pct) %>%
+  group_by(study_arm) %>%
+  mutate(pct = percent(n / sum(n))) %>%
+  arrange(study_arm, desc(n)) %>%
+  ungroup() %>%
+  select(-study_arm) %>%
+  rename(complete_rate = miss_item_pct) %>%
+  kable(caption = "Complete Rates of QOLIE") %>%
+  kable_styling(full_width = F) %>%
+  pack_rows("EUC",1,4) %>%
+  pack_rows("TSC",5,8) %>%
+  scroll_box()
+
+ggplot(data=allq) + 
+  geom_histogram(aes(x=miss_item),binwidth = 1) +
+  facet_grid(type~study_arm) +
+  theme_minimal() +
+  xlab("Number of missing item") + ylab("Freq") +
+  ggtitle("Missing items among the questions in QOLIE")
+```
+
+### Demographic of QOLIE users
+
+#### Gender
+
+```{r gender}
+allq %>% distinct(record_id) %>% left_join(gender) %>%
+  mutate(gender=factor(gender,levels=1:2,labels=c("Female","Male"))) %>%
+  count(study_arm, gender) %>% group_by(study_arm) %>%
+  mutate(pct = percent(n/sum(n))) %>%
+  kable() %>%
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover"))
+```
+
+#### City
+
+```{r city}
+allq %>% distinct(record_id) %>% left_join(location) %>%
+  count(study_arm, city) %>% group_by(study_arm) %>%
+  mutate(pct = percent(n/sum(n))) %>%
+  kable() %>%
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover"))
+```
+
+#### Age and Age eligibility
+
+```{r age}
+allq %>% 
+  ggplot(aes(x = age)) + 
+  geom_histogram(binwidth = 1) +
+  facet_grid(study_arm ~ order) +
+  theme_minimal() +
+  xlab("Age") + ylab("Freq") +
+  ggtitle("Age Distribution for QOLIE users")
+
+ggplot(allq %>% mutate(elig = factor(ifelse(type == eligibility, "Correct", "Ineligible"))), aes(x = age, y = score, color = factor(order), shape = elig)) +
+  geom_point(position = "dodge", alpha = 0.8) +
+  scale_color_brewer(palette = "Spectral")
+```
+
+### Distribution of QOLIE Scores
+
+```{r qolie-scores}
+allq %>% group_by(study_arm, order) %>% 
+  summarise(n_records = n(), mean_score = mean(score), sd_score = sd(score)) %>%
+  group_by(study_arm) %>%
+  mutate(pct_by_arm = percent(n_records / sum(n_records))) %>% 
+  ungroup() %>%
+  select(order, n_records, pct_by_arm, mean_score, sd_score) %>%
+  kable(caption="QOLIE records by order") %>% 
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover")) %>%
+  pack_rows("EUC",1,4) %>%
+  pack_rows("TSC",5,8)
+
+allq %>%
+  ggplot(aes(x=score, y=..density..)) + 
+  geom_histogram(binwidth = 2) +
+  geom_density() + 
+  facet_grid(study_arm ~ order) +
+  theme_minimal() +
+  xlab("QOLIE Scores") + ylab("Density") +
+  ggtitle("Density Distribution of valid QOLIE scores")
+```
+
+### Exploratory Hypothesis Testing
+
+Because there are not enough samples for order == 2 which also includes some noises, I excluded the 2th order in the analysis. The inclusion criteria is: participants with at least 0th(the regarded "first") and 3th(the regarded "last") QOLIE records.
+
+```{r qolie-ttest}
+qinfo = allq %>% filter(order == 0) %>% select(record_id) %>% inner_join(allq %>% filter(order == 3), by = "record_id") %>% select(record_id) %>% left_join(allq) %>% filter(order != 2) %>% left_join(gender) %>% left_join(location)
+# %>% filter(type = eligibility)
+
+t.test(
+  score ~ factor(study_arm),
+  data = qinfo,
+  var.equal = TRUE
+)
+```
+
+There's no difference between 2 arms among all times.
+
+The *study arm*, *order*, *gender*, and *city* variables are all categorical variables(like dummy variables) without numeric meaning, so we use factor here. *Age* is numeric.
+
+```{r lm0}
+summary(lm(score ~ factor(study_arm)*factor(order), qinfo))
+
+interaction.plot(x.factor = qinfo$order, #x-axis variable
+                 trace.factor = qinfo$study_arm, #variable for lines
+                 response = qinfo$score, #y-axis variable
+                 fun = mean, #metric to plot
+                 ylab = "QOLIE Score (marginal mean)",
+                 xlab = "Order of QOLIE",
+                 col = c("pink", "blue"),
+                 lty = 1, #line type
+                 lwd = 2, #line width
+                 trace.label = "Study Arm")
+```
+
+When trying to explain the group difference among the times and the arms,
+
+Although the main effect of Treatment is even unsignificantly negative (as the total mean of EUC and TSC is so close), **which may caused by the group difference when sampling**,
+
+the main effect of order is marginally(with p 0.05- 0.1) significantly positive -- as time goes by (**may caused by more treatment, changes in life, age grows**), the QOLIE score improves;
+
+the interaction of order and arm (TSC over EUC, order 3rd over order 0th) is significantly positive.
+
+```{r lm-age}
+summary(lm(score ~ factor(study_arm)*factor(order) + age, qinfo))
+
+ggplot(qinfo,aes(x = age, y = score, color = order)) +
+  geom_point(position = "jitter") +
+  geom_smooth(method='lm')
+```
+
+**Age plays a role over time** -- the order is no longer have a mariginal significance.
+
+But **the interaction still works**.
+
+```{r lm-gender}
+summary(lm(score ~ factor(study_arm)*factor(order) + factor(gender), qinfo))
+```
+
+**Gender plays no role.**
+
+```{r lm-city}
+summary(lm(score ~ factor(study_arm)*factor(order) + factor(city), qinfo))
+```
+
+**City plays a role for Zaria has smaller score compared to Keduna.**
+
+## VAS
+
+### Inclusion Criteria
+
+1. if the *missed_fu* is like "no" or "on time", include no matter any missing.
+
+2. if the *missed_fu* is **NA** or "Visit Done", inclusion depends on whether they filled all of *follow_up_care_form_complete*, *confirmseize*, *weight_fu_v2*, *seizeclass*. 
+
+3. if the *missed_fu* answers something else, exclude. 
+
+### Demographic
+
+```{r demograohic}
+fcf_c %>% distinct(record_id) %>% left_join(gender) %>%
+  mutate(gender=factor(gender,levels=1:2,labels=c("Female","Male"))) %>%
+  count(study_arm, gender) %>% group_by(study_arm) %>%
+  mutate(pct = percent(n/sum(n))) %>%
+  kable(caption = "Gender in 2 arms") %>%
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover"))
+
+fcf_c %>% distinct(record_id) %>% left_join(location) %>%
+  count(study_arm, city) %>% group_by(study_arm) %>%
+  mutate(pct = percent(n/sum(n))) %>%
+  kable(caption = "City in 2 arms") %>%
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover"))
+
+ggplot(fcf_c, aes(x = agefu, y = qolie, color = factor(redcap_repeat_instance))) +
+  geom_point(position = "dodge", alpha = 0.8) +
+  scale_color_brewer(palette = "Spectral")
+```
+
+### Analysis of VAS over time
+
+```{r vas-analysis}
+fcf_c %>%
+  ggplot(aes(x=qolie)) + 
+  geom_histogram(binwidth = 1) +
+  facet_grid(study_arm~.) +
+  theme_minimal() +
+  xlab("VAS") + ylab("Freq") +
+  ggtitle("Distribution of valid scores")
+```
+
+```{r lm}
+summary(lm(qolie ~ factor(study_arm)*factor(redcap_repeat_instance), fcf_c))
+```
+
+**Main effect of arms, instances and interactions of arms and instances are all siginificant.**  
+
+```{r more-lm}
+summary(lm(qolie ~ factor(study_arm)*factor(redcap_repeat_instance) + agefu, fcf_c))
+
+cat("age plays a role but the factors still have siginificant effects. ")
+
+summary(lm(qolie ~ factor(study_arm)*factor(redcap_repeat_instance) + factor(gender), fcf_c))
+
+cat("There is no difference between the genders. ")
+
+summary(lm(qolie ~ factor(study_arm)*factor(redcap_repeat_instance) + factor(city), fcf_c))
+
+cat("As for the cities, Keduna > Kano > Zaria")
+```
+
+# Questions for Aim 3 Meeting
+
+## Content of Aim 3 in the protocol
+
+**Determine the cost-effectiveness of the task-shifted epilepsy care intervention.**
+
+Direct costs of the intervention and EUC will include personnel costs (including CHEW epilepsy training) and expenses for diagnostic (EEG, brain imaging) and laboratory tests and anti-epileptic drugs.
+
+Indirect costs will include travel time and time away from work for parents/guardians and change in school attendance for patients.
+
+Cost-effectiveness will be expressed as US dollars per disability adjusted life year (DALY) averted.
+
+## Progress of our work
+
+Half-way to find the effectiveness of TSC.
+
+## Questions
+
+1.  We have collected both VAS scores over the 10 follow up visits and Qolie scores from the Screening and follow up visits. Which one should we use for the calculation of effectiveness: just VAS, just Qolie, or mix them?
+2.  Is the age restriction necessary for data admission?
+3.  What is the timeline for Aim 3 research?

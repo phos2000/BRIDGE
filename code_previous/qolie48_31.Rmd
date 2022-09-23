@@ -16,7 +16,6 @@ library(knitr)
 library(scales)
 library(lubridate)
 library(kableExtra)
-
 ```
 
 ## Source Data

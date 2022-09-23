@@ -465,8 +465,6 @@ o2 <- full_join(s1x,s2x) %>%
 
 o2 %>% kable(caption = "EQ5D VAS Split up follow-up") %>% 
   kable_styling()
-
-summary(lm(qolie ~ factor(study_arm) + factor(redcap_repeat_instance), fcf_c))
 ```
 
 3.  **By visit - gender**
@@ -523,6 +521,7 @@ fcf_c = fcf_c %>% left_join(gd)
 location <- fu %>% filter(!is.na(city)) %>% distinct(record_id,city,study_arm) 
 fcf_c = fcf_c %>% left_join(location)
 
+summary(lm(qolie ~ factor(study_arm) + factor(redcap_repeat_instance) + factor(study_arm):factor(redcap_repeat_instance), fcf_c))
 summary(lm(qolie ~ factor(study_arm) + factor(redcap_repeat_instance) + factor(gender), fcf_c))
 summary(lm(qolie ~ factor(study_arm) + factor(redcap_repeat_instance) + factor(city), fcf_c))
 ```
@@ -602,7 +601,7 @@ fudw <- fud %>% select(-datefu) %>% rename(age=agefu) %>%
          d89=as.integer(date_9-date_8),
          d109=as.integer(date_10-date_9))
 
-save(fudw,file="fcf_dates_wide.rda")
+save(fcf_c, fudw,file="fcf_dates_wide.rda")
 
 cat("In the following table, column d01 describes time interval between baseline and the first follow-up vist; d12 describes time interval between 1st and 2nd visit.\n")
 

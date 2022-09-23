@@ -917,3 +917,154 @@ allqolie_c = allqolie_c %>% mutate(eligibility = ifelse(age < 11, "VAS", eligibi
 
 ```
 build new instances based on the time order. 
+
+why there's only 800 participants?
+number of participants who has at least one time record to be over 11 is 851. 
+
+```{r}
+fu %>% filter(agefu > 11) %>% distinct(record_id)
+
+```
+dateqolie0 is the first time of qolie, no matter the relationship with the datebaseline. 
+dateqolie1 is better to be 2 month later than dateqolie0. but I can accept before or later. 
+dateqolie2 is
+dateqolie3 is the last time of qolie and it should be more than at least 300 days. on 2022. 
+
+
+```{r}
+allqolie_c %>% filter(dateqolie < datebaseline) %>% select(record_id, dateqolie) %>% left_join(allqolie_c, by = "record_id")
+allqolie_c %>% mutate(datediff = difftime(dateqolie,datebaseline, units = "days")) %>% count(instance, datediff) %>% group_by(instance) %>% mutate(n_sum = sum(n))
+datediff = allqolie_c %>% mutate(datediff = difftime(dateqolie,datebaseline, units = "days")) %>% count(instance, datediff)
+
+allqolie_c %>% mutate(datediff = difftime(dateqolie,datebaseline, units = "days")) %>% filter(datediff > 300) %>% select(record_id, datediff, dateqolie) %>% left_join(allqolie_c, by = "record_id") %>% arrange(datediff)
+
+ggplot(datediff, aes(x = datediff, y = datediff)) + geom_point()
+
+#allqolie_c %>% filter(is.na(dateqolie))
+# find the first:
+#allqolie_c$order = NA
+#allqolie_c[1, "order"] = 0
+
+
+
+for (i in 2:nrow(allqolie_c)) {
+  if (allqolie_c[i, "record_id"] != allqolie_c[i-1, "record_id"]) {
+    # the first date
+    allqolie_c[i, "order"] = 0
+    # whether date3(last date)
+    lastfirstdate = allqolie_c %>% filter(order == 0 & record_id == allqolie_c[i-1, "record_id"]) %>% select(dateqolie) %>% pull(1)
+    if (!is.na(allqolie_c[i-1, "dateqolie"]) & !is.na(lastfirstdate) & difftime(allqolie_c[i-1, "dateqolie"] %>% pull(1), lastfirstdate) > 400) {
+      allqolie_c[i-1, "order"] = 3
+    }
+  } else {
+    allqolie_c[i, "order"] = allqolie_c[i-1, "order"] + 1
+  }
+}
+
+wrongEndDate = allqolie_c %>% filter(order == 3 & dateqolie < '2022-01-01') %>% select(record_id, dateqolie,order) %>% left_join(allqolie_c, by = "record_id") %>% arrange(record_id, dateqolie.y)
+
+wrongEndDate = wrongEndDate[5:8,]
+wrongEndDate$reorder = c(0,1,2,3)
+
+# for those only have one time qolie -- age so young
+newQolieUsers = allqolie_c %>% filter(order == 0 & dateqolie > '2022-01-01') %>% select(record_id, dateqolie, order) %>% mutate(reorder = 3)
+allqolie_c = allqolie_c %>% left_join(newQolieUsers)
+
+allqolie_c %>% filter(order == 1 | order == 2)
+
+wrongStartDate = allqolie_c %>% filter(order == 0) %>% select(record_id, dateqolie, order) %>% left_join(allqolie_c, by = "record_id", suffix = c("_0","_all")) %>% filter(dateqolie_0 > dateqolie_all) %>% select(record_id) %>% left_join(allqolie_c) %>% arrange(record_id, dateqolie)
+
+wrongStartDate$reorder = c(0,1,2,3,0,1,2,3,0,1,2,3,1,3,1,3)
+wrongStartDate$remove = c(rep(NA,12), 1, 0, 1, 0)
+
+allqolie_c = allqolie_c %>% left_join(wrongEndDate %>% select(record_id, age, reorder), by = c("record_id", "age"))
+allqolie_c  = allqolie_c %>% left_join(wrongStartDate %>% select(record_id, age, reorder,remove), by = c("record_id", "age"))
+allqolie_c = allqolie_c %>% left_join(wrongMiddle1, by = c("record_id", "dateqolie", "order"))
+allqolie_c = allqolie_c %>% left_join(wrongMiddle2, by = c("record_id", "dateqolie", "order"))
+
+allqolie_c = allqolie_c %>% mutate(reorder = ifelse(!is.na(reorder.x), reorder.x, reorder)) %>% mutate(reorder = ifelse(!is.na(reorder.y), reorder.y, reorder)) %>% select(-reorder.x, -reorder.y)
+
+allqolie_c %>% filter(!is.na(reorder))
+
+allqolie_ordered = allqolie_c %>% mutate(order = ifelse(!is.na(reorder), reorder, order)) %>% select(-reorder) 
+allqolie_ordered %>% arrange(desc(qolietimes), record_id, order)
+
+allqolie_ordered %>% filter(order == 0) %>% select(record_id, dateqolie, order) %>% left_join(allqolie_ordered, by = "record_id", suffix = c("_0","_all")) %>% filter(dateqolie_0 > dateqolie_all)
+
+wrongMiddle1 = allqolie_ordered %>% filter(order == 3) %>% select(record_id, dateqolie, order) %>% left_join(allqolie_ordered, by = "record_id", suffix = c("_3","_all")) %>% filter(dateqolie_3 < dateqolie_all) %>% select(record_id) %>% left_join(allqolie_ordered) %>% select(record_id, dateqolie, order, remove) %>% arrange(record_id, dateqolie)
+
+wrongMiddle2 = allqolie_ordered %>% filter(order == 2) %>% select(record_id, dateqolie, order) %>% left_join(allqolie_ordered %>% filter(order == 1), by = "record_id", suffix = c("_2","_1"))  %>% filter(dateqolie_2 < dateqolie_1) %>% select(record_id) %>% left_join(allqolie_ordered) %>% select(record_id, dateqolie, order, remove) %>% arrange(record_id, dateqolie)
+
+wrongMiddle1$reorder = c(0,1,2,3,1,3)
+wrongMiddle1$remove = c(NA,NA,1,0,1,0)
+wrongMiddle2$reorder = c(0,1,2,0,1,2,3,0,1,2,0,1,2)
+wrongMiddle2[12,"remove"] = 1
+wrongMiddle2[12,"remove"] = 0
+
+allqolie_ordered[allqolie_ordered$record_id == "PHC-74---82-2020-09-02 09:26" & allqolie_ordered$dateqolie == "2022-07-06", "order"] = 1
+allqolie_ordered[allqolie_ordered$record_id == "PHC-74---82-2020-09-02 09:26" & allqolie_ordered$dateqolie == "2022-07-06", "remove"] = 1
+
+allqolie_ordered%>% filter(order != 3 & dateqolie > '2022-01-01') %>% select(record_id) %>% left_join(allqolie_ordered)
+
+# take NA to be #2 if 4. 
+allqolie_ordered %>% filter(is.na(dateqolie) & qolietimes == 4) %>% select(record_id) %>% left_join(allqolie_ordered)
+allqolie_ordered[allqolie_ordered$record_id == "PHC---156-16-2020-09-02 09:28" & allqolie_ordered$order == 1, "order"] = 2
+allqolie_ordered[allqolie_ordered$record_id == "PHC---156-16-2020-09-02 09:28" & allqolie_ordered$miss_item == 0, "order"] = 1
+
+
+allq = allqolie_ordered %>% select(-qolietimes, -ev0, -instance) %>% rename(datebirth = bd) %>% arrange(record_id, order)
+
+
+allq %>% filter(order == 1 & dateqolie > '2022-01-01') %>% select(record_id) %>% left_join(allq)
+allq[allq$record_id == "PHC---154-63-2020-06-30 22:12", "order"] = c(2,3)
+allq[allq$record_id == "PHC-23---9-2020-07-14 23:18", "order"] = c(2,3)
+allq[allq$record_id == "PHC-31---45-2020-07-15 06:12", "order"] = c(2,3)
+allq[allq$record_id == "PHC-74---82-2020-09-02 09:26", "order"] = c(2,3)
+```
+
+## new dataset
+as no homogeny among the middle time, delete the middle times and only leave the cases with the first time and second time
+
+should q31 and q48 on the same scale? -- base on the norm and normalized?
+
+```{r all}
+allq %>% filter(order == 2) %>% select(record_id) %>% left_join(allq)
+
+ggplot(data=allq) + 
+  geom_histogram(aes(x=miss_item),binwidth = 1) +
+  facet_grid(study_arm~.) +
+  theme_minimal() +
+  xlab("Number of missing item") + ylab("Freq") +
+  ggtitle("Missing any of the questions in QOLIE")
+
+allq %>% group_by(study_arm, order) %>% summarise(n_records = n(), mean_score = mean(score))
+
+allq %>% group_by(order) %>% mutate(datediff = difftime(dateqolie, datebaseline, units = "days")) %>% count(datediff)
+# as no homogeny among the middle time
+
+allq %>% filter(order != 2) %>%
+  ggplot(aes(x=score)) + 
+  geom_histogram(binwidth = 2) +
+  facet_grid(study_arm ~ order) +
+  theme_minimal() +
+  xlab("QOLIE") + ylab("Freq") +
+  ggtitle("Distribution of valid QOLIE scores")
+
+
+qinfo = allq %>% filter(order == 1 | order == 3) %>% left_join(gender) %>% left_join(location)
+
+qinfo = allq %>% count(record_id) %>% filter(n >= 2) %>% select(record_id) %>% left_join(allq) %>% filter(order == 1 | order == 3) %>% left_join(gender) %>% left_join(location) %>% filter(type == eligibility)
+
+t.test(
+  score ~ factor(study_arm),
+  data = qinfo,
+  var.equal = TRUE
+)
+
+# I'm thinking about diff-in-diff
+summary(lm(score ~ factor(study_arm) + factor(order) + factor(study_arm):factor(order), qinfo))
+summary(lm(score ~ factor(study_arm) + factor(order) + factor(gender), qinfo))
+summary(lm(score ~ factor(study_arm) + factor(order) + factor(study_arm):factor(order) + factor(city), qinfo))
+
+save(r31, r48, allq, gender, location, file = "all_qolie_together.rda")
+```
