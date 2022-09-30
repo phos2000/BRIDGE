@@ -1,0 +1,146 @@
+---
+title: "seizure"
+author: "Astrid"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+library(tidyverse)
+library(knitr)
+library(scales)
+library(lubridate)
+library(kableExtra)
+library(stats)
+library(reshape)
+```
+
+```{r read}
+fu <- data.table::fread("../data/FollowDat.csv")
+bs <- data.table::fread("../data/BaseDat.csv")
+load("fcf_dates_wide.rda")
+```
+
+# Addition for VAS
+
+-   Add the screening records (instance = 0)
+
+-   Show the interaction plot
+
+-   include the age(significant), city(significant) elements
+
+```{r vas}
+vas = rbind(bs %>% filter(!is.na(vas_qolie_48)) %>% transmute(record_id, study_arm, redcap_repeat_instance = 0, qolie = vas_qolie_48, age, gender, city), fcf_c %>% filter(!is.na(qolie)) %>% select(record_id, study_arm, redcap_repeat_instance, qolie, age = agefu, gender, city))
+
+summary(lm(qolie ~ factor(study_arm)*factor(redcap_repeat_instance) + age + factor(city), vas))
+
+interaction.plot(x.factor = vas$redcap_repeat_instance, #x-axis variable
+                 trace.factor = vas$study_arm, #variable for lines
+                 response = vas$qolie, #y-axis variable
+                 fun = mean, #metric to plot
+                 ylab = "VAS score (marginal mean)",
+                 xlab = "instance",
+                 col = c("pink", "blue"),
+                 lty = 1, #line type
+                 lwd = 2, #line width
+                 trace.label = "Study Arm")
+```
+
+# What kind of dependent variables can we use?
+
+-   Binomial question: 0 for No, 1 for Yes
+    -   diagnosis_of_seizures: confirmseize
+
+    -   weakness
+
+    -   tremor_present_v2
+
+    -   development delay: nodelays (for original question, 0 for no, 1 - 5 for classification)
+
+    -   development regression: dev_regression_v2
+-   Categorical Question: no sure is there any ranks between the categories
+    -   seizure classification: seizeclass
+-   Continuous Question
+    -   how many times of experienced seizures since last visit: TSC -- expseiz + how_many_seiz_v2, EUC -- seize_since_last_euc_v2 + number_seiz
+
+    -   how many times of experienced prolonged seizures: TSC - prolonged_seiz_v2 + how_many_prolonged_v2, EUC - prolonged_euc_v2 + number_prolonged_euc_v2
+
+## Binomial Questions
+
+Development delay question shows kind of interaction, devolopment regression questions shows kind of main effect of instances.
+
+```{r binominal-result}
+summary(glm(confirmseize ~ factor(study_arm)*factor(redcap_repeat_instance), fcf_c %>% filter(confirmseize != 2), family = "binomial"))
+summary(glm(weakness ~ factor(study_arm)*factor(redcap_repeat_instance), fcf_c, family = "binomial"))
+summary(glm(tremor_present_v2 ~ factor(study_arm)*factor(redcap_repeat_instance), fcf_c, family = "binomial"))
+summary(glm(delays ~ factor(study_arm)*factor(redcap_repeat_instance), fcf_c %>% mutate(delays = ifelse(nodelays == 0, 1, 0)), family = "binomial"))
+summary(glm(dev_regression_v2 ~ factor(study_arm)*factor(redcap_repeat_instance), fcf_c %>% filter(dev_regression_v2 != 2), family = "binomial"))
+```
+
+## Times of seizures experienced since last visit
+
+There's effect from age and city.
+
+```{r seizure-times}
+#melt
+preInterval = cbind(fudw['record_id'], stack(fudw[c("d01","d12", "d23", "d34", "d45", "d56", "d67", "d78", "d89", "d109")])) %>% mutate(instance = ifelse(ind == "d109", 10, as.numeric(ind[-1]))) %>% select(record_id, instance, interval = values)
+
+seizure_tsc = fcf_c %>% filter(!is.na(expseiz) & study_arm == "TSC") %>% mutate(seiz_times = ifelse(is.na(how_many_seiz_v2), 0, how_many_seiz_v2)) %>% left_join(preInterval, by = c("record_id", "redcap_repeat_instance" = "instance")) %>% mutate(seiz_freq = 365.25 * seiz_times / interval)
+seizure_euc = fcf_c %>% filter(seize_since_last_euc_v2 != 2 & study_arm == "EUC") %>% mutate(seiz_times = ifelse(is.na(number_seiz), 0, number_seiz)) %>% left_join(preInterval, by = c("record_id", "redcap_repeat_instance" = "instance")) %>% mutate(seiz_freq = 365.25 * seiz_times / interval)
+seizure_times = rbind(seizure_tsc, seizure_euc) %>% filter(!is.na(seiz_freq) & seiz_freq != Inf)
+
+summary(lm(seiz_freq ~ factor(study_arm)*factor(redcap_repeat_instance) + agefu + factor(gender) + factor(city), seizure_times))
+
+interaction.plot(x.factor = seizure_times$redcap_repeat_instance, #x-axis variable
+                 trace.factor = seizure_times$study_arm, #variable for lines
+                 response = seizure_times$seiz_freq, #y-axis variable
+                 fun = mean, #metric to plot
+                 ylab = "frequency of seizures (times per year)",
+                 xlab = "instance",
+                 col = c("pink", "blue"),
+                 lty = 1, #line type
+                 lwd = 2, #line width
+                 trace.label = "Study Arm")
+```
+
+## Times of prolonged seizures experienced since last visit
+
+No effect from age, city and gender.
+
+```{r prolonged-seizures}
+
+prolonged_tsc = fcf_c %>% filter(prolonged_seiz_v2 != 2 & study_arm == "TSC") %>% mutate(prol_times = ifelse(is.na(how_many_prolonged_v2), 0, how_many_prolonged_v2)) %>% left_join(preInterval, by = c("record_id", "redcap_repeat_instance" = "instance")) %>% mutate(prol_freq = 365.25 * prol_times / interval)
+
+prolonged_euc = fcf_c %>% filter(prolonged_euc_v2 != 2 & study_arm == "EUC") %>% mutate(prol_times = ifelse(is.na(number_prolonged_euc_v2), 0, number_prolonged_euc_v2)) %>% left_join(preInterval, by = c("record_id", "redcap_repeat_instance" = "instance")) %>% mutate(prol_freq = 365.25 * prol_times / interval)
+
+prolonged_times = rbind(prolonged_tsc, prolonged_euc) %>% filter(prol_freq != Inf)
+
+summary(lm(prol_freq ~ factor(study_arm)*factor(redcap_repeat_instance)  + agefu + factor(gender) + factor(city), prolonged_times))
+
+interaction.plot(x.factor = prolonged_times$redcap_repeat_instance, #x-axis variable
+                 trace.factor = prolonged_times$study_arm, #variable for lines
+                 response = prolonged_times$prol_freq, #y-axis variable
+                 fun = mean, #metric to plot
+                 ylab = "frequency of prolonged seizures (times per year)",
+                 xlab = "instance",
+                 col = c("pink", "blue"),
+                 lty = 1, #line type
+                 lwd = 2, #line width
+                 trace.label = "Study Arm")
+```
+
+# Next step
+
+-   Should we delete the dropped-out participants from our analysis? Included or excluded their existing cases?
+
+    -   maybe just 2 versions and compares
+
+-   After the Bangkok trip, recheck all the important results with the updated datasets
+
+-   Any info about the other OUD project?
