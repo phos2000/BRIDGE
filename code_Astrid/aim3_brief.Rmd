@@ -22,8 +22,12 @@ library(kableExtra)
 # Analysis and Result Briefs
 
 ```{r read-vas-data}
-fu <- data.table::fread("../data/FollowDat.csv")
-load("fcf_dates_wide.rda")
+# fu <- data.table::fread("../data/FollowDat.csv")
+# load("orginial_qolie.rda")
+# load("all_qolie_together.rda")
+# load("re_qolie.rda")
+
+load("without-drop-out.rda")
 ```
 
 ## QOLIE(QOLIE-31 & QOLIE-AD-48)
@@ -60,11 +64,6 @@ For every participant,
 4.  1st or 2nd: the ones between the 0th and 3rd. For participants with 4 times of QOLIE and participants with 2 times of after-"2022-01-01" QOLIE, the 2nd will be filled -- they could also be dropped as they are not so consistent with the schedule;
 
 5.  For the records with "NA" dates, the order will depend on the *instance*. I prefer to put them on the 2nd, as they might be dropped as the data includes too much noises.
-
-```{r load-qolie}
-load("original_qolie.rda")
-load("all_qolie_together.rda")
-```
 
 ### Missing Rate for QOLIE
 

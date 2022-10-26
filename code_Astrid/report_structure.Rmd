@@ -552,7 +552,7 @@ fcf_c = fcf %>%
 
 fcf_c %>%
   count(incomplete, missed_fu,sort = TRUE) %>%
-  left_join(vas %>% count(missed_fu), by = c("missed_fu"), suffix = c("_inclusive", "_in_and_ex")) %>%
+  left_join(fcf_c %>% count(missed_fu), by = c("missed_fu"), suffix = c("_inclusive", "_in_and_ex")) %>%
   mutate(pct = percent(n_inclusive / n_in_and_ex)) %>%
   kable(caption = "incomplete = 0 means completing all the key questions") %>%
   kable_styling() %>%
@@ -738,8 +738,17 @@ order1 = allqolie_c %>% anti_join(order0) %>% anti_join(order3) %>% anti_join(or
 ## bind
 allq = bind_rows(order0, order1, order2, order3)
 
+save(fu, bs, allq, fcf_c, gender, fudw, gender, location, dob, file = "with-drop-out.rda")
 ```
 
+```{r comparison-drop-out}
+allq = allq %>% 
+  anti_join(fu %>% filter(reason != 1) %>% distinct(study_arm,record_id))
+
+fcf_c = fcf_c %>% anti_join(fu %>% filter(reason != 1) %>% distinct(study_arm,record_id))
+
+save(fu, bs, allq, fcf_c, gender, fudw, gender, location, dob, file = "without-drop-out.rda")
+```
 # Results
 
 see aim3_brief.
