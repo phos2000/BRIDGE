@@ -27,7 +27,7 @@ library(kableExtra)
 # load("all_qolie_together.rda")
 # load("re_qolie.rda")
 
-load("without-drop-out.rda")
+load("with-drop-out.rda")
 ```
 
 ## QOLIE(QOLIE-31 & QOLIE-AD-48)
@@ -273,11 +273,11 @@ summary(lm(score ~ factor(study_arm)*factor(order) + factor(city), qinfo))
 
 ### Inclusion Criteria
 
-1. if the *missed_fu* is like "no" or "on time", include no matter any missing.
+1. if the *missed_fu* is like "no" or "on time", include no matter any missing. There're `r nrow(fcf %>% filter(missed_fu %in% c("No", "No missed", "None", "N0", "Not missed", "NO", "No miss", "No missing", "No messing", "No missen", "0", "On time")))` records(`r nrow(fcf %>% filter(missed_fu %in% c("No", "No missed", "None", "N0", "Not missed", "NO", "No miss", "No missing", "No messing", "No missen", "0", "On time")))*100/nrow(fcf)` % of all) meeting the conditions.
 
-2. if the *missed_fu* is **NA** or "Visit Done", inclusion depends on whether they filled all of *follow_up_care_form_complete*, *confirmseize*, *weight_fu_v2*, *seizeclass*. 
+2. if the *missed_fu* is **NA** or "Visit Done", inclusion depends on whether they filled all of *follow_up_care_form_complete*, *confirmseize*, *weight_fu_v2*, *seizeclass*. There 're `r nrow(fcf %>% filter(((str_detect(missed_fu, "Visit done") | str_detect(missed_fu, "Visit Done") | is.na(missed_fu)) & incomplete == 0)))` records (`r nrow(fcf %>% filter(((str_detect(missed_fu, "Visit done") | str_detect(missed_fu, "Visit Done") | is.na(missed_fu)) & incomplete == 0)))*100/nrow(fcf)` % of all) meeting the conditions.
 
-3. if the *missed_fu* answers something else, exclude. 
+3. if the *missed_fu* answers something else, exclude. There're `r nrow(fcf %>% filter(missed == 1))` records (`r nrow(fcf %>% filter(missed == 1))*100/nrow(fcf)` % of all) excluded. 
 
 ### Demographic
 
@@ -311,12 +311,17 @@ fcf_c %>%
   xlab("VAS") + ylab("Freq") +
   ggtitle("Distribution of valid scores")
 ```
+#### Main effects and interactions of study arms and visit times
+
+For the cost-effectiveness analysis, we need to compare the utilities between the two arms along with the 10 follow up visits. 
+
+Study arm is a two-level factor as EUC is the control group and TSC is the treatment group. The main effect of study arm itself, is 
 
 ```{r lm}
 summary(lm(qolie ~ factor(study_arm)*factor(redcap_repeat_instance), fcf_c))
 ```
 
-**Main effect of arms, instances and interactions of arms and instances are all siginificant.**  
+**Main effect of arms, instances and interactions of arms and instances are all significant.**  
 
 ```{r more-lm}
 summary(lm(qolie ~ factor(study_arm)*factor(redcap_repeat_instance) + agefu, fcf_c))

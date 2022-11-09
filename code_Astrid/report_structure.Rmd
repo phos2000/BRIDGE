@@ -747,7 +747,7 @@ allq = allq %>%
 
 fcf_c = fcf_c %>% anti_join(fu %>% filter(reason != 1) %>% distinct(study_arm,record_id))
 
-save(fu, bs, allq, fcf_c, gender, fudw, gender, location, dob, file = "without-drop-out.rda")
+save(fu, bs, allq, fcf, fcf_c, gender, fudw, gender, location, dob, file = "without-drop-out.rda")
 ```
 # Results
 
