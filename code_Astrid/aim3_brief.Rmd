@@ -15,17 +15,23 @@ knitr::opts_chunk$set(message = FALSE)
 library(tidyverse)
 library(knitr)
 library(scales)
+library(data.table)
 library(lubridate)
 library(kableExtra)
 ```
 
 # Analysis and Result Briefs
 
+If you'd like to see the results for participants excluding drop-outs, load the "without-drop-out.rda".
+
 ```{r read-vas-data}
 load("with-drop-out.rda")
+# load("without-drop-out.rda")
 ```
 
 ## dropout rate
+
+Drop-outs are participants that has been terminated for their own reasons: moving, unable to contact, refusing to join in and so on.
 
 Although the drop-out rate is more than 10%, the result of our analysis don't have a evident difference. So we include the records of participants who have been terminated without completion.
 
@@ -281,7 +287,7 @@ The lm formula creates several dummy variables:
 
 *order1* and *order3*, for 0th having both 2 are 0, 1th for only order1 = 1 and 3th for only order3 = 1.
 
-$$QOLIE = 48.2602 + 0.2808 * TSC + 2.3254 * order1 + 4.0736 * order3 - 1.0734*TSC*order1 + 2.4071 * TSC*order3$$
+$$QOLIE = 47.8371 + 0.5864 * TSC + 2.3215 * order1 + 4.5656 * order3 \\ - 1.0626 * TSC*order1 + 2.0864 * TSC*order3$$
 
 ```{r lm-age}
 summary(lm(score ~ factor(study_arm)*factor(order) + age, qinfo))
@@ -295,7 +301,7 @@ ggplot(qinfo,aes(x = age, y = score, color = order)) +
 
 the lm formula is (only age is not a dummy variable):
 
-$$QOLIE = 34.4684 + 0.2764 * TSC + 2.1276 * order1 + 2.3020 * order3 - 1.0592*TSC*order1 + 2.4055 * TSC*order3 + 0.9673 * age$$
+$$QOLIE = 34.7492 + 0.5832 * TSC + 2.1348 * order1 + 2.8863 * order3 \\ - 1.0423*TSC*order1 + 2.0852 * TSC*order3 + 0.9166 * age$$
 
 ```{r lm-gender}
 summary(lm(score ~ factor(study_arm)*factor(order) + factor(gender), qinfo))
@@ -358,7 +364,7 @@ fcf_c %>%
 
 For the cost-effectiveness analysis, we need to compare the utilities between the two arms along with the 10 follow up visits. Study arm is a two-level factor as EUC is the control group and TSC is the treatment group. lm function creates a dummy variable named TSC(the line: **factor(study_arm) TSC**) that *TSC* = 1 for TSC group and *TSC* = 0 for EUC group.
 
-The main effect of visits is to use the Screening (**visit 0**) as the baseline. There are 10 dummy variables for all follow-up visits: if all are 0, it refers to the screening visit; if *visit1* = 1, the others should all be 0 and this refers to Follow-up Visit 1.
+The main effect of visits is to use the **Screening** (**visit 0**) as the baseline. There are 10 dummy variables for all follow-up visits: if all are 0, it refers to the screening visit; if *visit1* = 1, the others should all be 0 and this refers to Follow-up Visit 1.
 
 The interaction shows the expected difference in the effect of the N-th visit(compared to the screening) for TSC participants versus EUC participants. For example, **factor(study_arm)TSC:factor(visit)1** means *visit1* = 1 and *TSC* = 1, which compares the VAS of the TSC arm on the first follow-up visit with that of the EUC arm. If it is the screening visit or in EUC arm, all the interaction portions will be zero.
 
@@ -366,15 +372,13 @@ The intercept, is the average VAS of screening visit in EUC arm.
 
 The linear model formula is:
 
-$$VAS = 48.564 + 3.804*TSC + 5.090*Visit_1 + 7.981*Visit_2 + 12.403 * Visit_3 + 15.246*Visit_4 + 19.874 * Visit_5 \\
- + 22.715*Visit_6 + 26.013 * Visit_7 + 29.775 * Visit_8 + 30.112 * Visit_9 + 31.555 * Visit_{10} \\
- + 2.287 * TSC * Visit_1 + 5.476 * TSC * Visit_2 + 4.390 * TSC * Visit_3 + 5.996 * TSC * Visit_4 + 4.221 * TSC * Visit_5 \\
- + 5.384 * TSC * Visit_6 + 5.252 * TSC * Visit_7 + 5.656 * TSC * Visit_8 + 6.045 * TSC * Visit_9 + 6.560 * TSC * Visit_{10} $$
+$$VAS = 48.564 + 3.804*TSC + 5.520*Visit_1 + 8.489*Visit_2 + 12.467 * Visit_3 + 15.260*Visit_4 + 19.413 * Visit_5 \\
+ + 22.331*Visit_6 + 25.714 * Visit_7 + 29.671 * Visit_8 + 29.965 * Visit_9 + 31.491 * Visit_{10} \\
+ + 1.397 * TSC * Visit_1 + 4.916 * TSC * Visit_2 + 4.204 * TSC * Visit_3 + 5.863 * TSC * Visit_4 + 4.580 * TSC * Visit_5 \\
+ + 5.527 * TSC * Visit_6 + 5.383 * TSC * Visit_7 + 5.709 * TSC * Visit_8 + 5.960 * TSC * Visit_9 + 6.530 * TSC * Visit_{10} $$
 
 ```{r lm}
-summary(lm(qolie ~ factor(study_arm)*factor(redcap_repeat_instance), fcf_c))
-
-fcf_i = fcf_c %>% filter(!is.na(qolie)) %>% select(record_id, study_arm, visit = redcap_repeat_instance, qolie, age = agefu, gender, city) %>% mutate(gender = ifelse(gender == 1, "Female", "Male")) %>% bind_rows(bs %>% filter(qolie_48_1117_v0_complete == "2") %>% select(record_id = unique_id, study_arm, qolie = vas_qolie_48, age, gender, city) %>% mutate(visit = 0))
+fcf_i = fcf_c %>% filter(!is.na(qolie)) %>% select(record_id, study_arm, visit = redcap_repeat_instance, qolie, age = agefu, gender, city) %>% mutate(gender = ifelse(gender == 1, "Female", "Male"), visit = as.numeric(visit)) %>% bind_rows(bs %>% filter(qolie_48_1117_v0_complete == "2") %>% select(record_id = unique_id, study_arm, qolie = vas_qolie_48, age, gender, city) %>% mutate(visit = 0))
 
 summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))
 
@@ -394,6 +398,12 @@ interaction.plot(x.factor = fcf_i$visit, #x-axis variable
 **the number of \* shows the level of significance. Here, from the interaction parts, we can find the score of TSC is significantly higher than EUC for every visit.**
 
 **For the screening visit, the score of TSC is 3.804 higher than the EUC(p = 0.02 shows significant group difference in the popularity). The difference expands over the visits(3.804 + 2.287 for Visit 1 until 3.804 + 6.560 for Visit 10).**
+
+#### Age as covariant
+
+As it cost 2 years for the whole process, the kids may have improved VAS just due to the increasing age, while age is not a element of our research interest-- that's why we add age as a covariant.
+
+To highlight the age, here we use residuals of VAS after excluding the age effect, rather than just add age into the model.
 
 ```{r age-lm}
 
@@ -417,8 +427,6 @@ interaction.plot(x.factor = fcf_a$visit, #x-axis variable
                  trace.label = "Study Arm")
 ```
 
-As it cost 2 years for the whole process, the kids may have improved VAS just due to the increasing age, while age is not a element of our research interest-- that's why we add age as a covariant.
-
 age plays a role to interpret the increasing tendency of VAS over 10 visits, but the Task-shift treatment still have better effects than the the control group proved to be significant from the interaction estimates.
 
 ```{r more-lm}
@@ -440,7 +448,7 @@ the only question is that in the Screening questionnaire, the VAS is contained i
 We can still try to use the first follow-up visit VAS(which is in the follow up care form) as the 1st if they don't have. The 1st should be Month 2, so we use instance 3 VAS to add.
 
 ```{r VAS-QOLIE}
-qv = allq %>% filter(order == 0) %>% select(record_id) %>% inner_join(allq %>% filter(order == 3), by = "record_id") %>% select(record_id) %>% left_join(allq) %>% filter(order != 2) %>% count(record_id) %>% filter(n < 3) %>% select(-n) %>% left_join(fcf_c %>% filter(redcap_repeat_instance == 3) %>% mutate(order = 1) %>% select(record_id, study_arm, dateqolie = datefu, qolie, order, age = agefu), by = "record_id")  %>% filter(!is.na(qolie)) %>% bind_rows(allq %>% filter(order == 0) %>% select(record_id) %>% inner_join(allq %>% filter(order == 3), by = "record_id") %>% select(record_id) %>% left_join(allq) %>% filter(order != 2) %>% rename(qolie = score))
+qv = allq %>% filter(order == 0) %>% select(record_id) %>% inner_join(allq %>% filter(order == 3), by = "record_id") %>% select(record_id) %>% left_join(allq) %>% filter(order != 2) %>% count(record_id) %>% filter(n < 3) %>% select(-n) %>% left_join(fcf_c %>% filter(redcap_repeat_instance == 3) %>% mutate(order = 1) %>% transmute(record_id, study_arm, dateqolie = as.IDate(datefu), qolie, order, age = agefu), by = "record_id")  %>% filter(!is.na(qolie)) %>% bind_rows(allq %>% filter(order == 0) %>% select(record_id) %>% inner_join(allq %>% filter(order == 3), by = "record_id") %>% select(record_id) %>% left_join(allq) %>% filter(order != 2) %>% rename(qolie = score))
 
 summary(lm(qolie ~ factor(study_arm)*factor(order), qv))
 
@@ -463,9 +471,9 @@ originally, we have `r nrow(allq %>% filter(order == 0))` order0 records and `r 
 ## using the first follow-up(1th) VAS as the baseline for those don't have the 0th QOLIE
 
 ```{r vas-0thqolie}
-new0 = allq %>% filter(order == 3) %>% anti_join(allq %>% filter(order == 0) %>% select(record_id)) %>% select(record_id) %>% left_join(fcf_c %>% filter(redcap_repeat_instance == 1) %>% mutate(order = 0) %>% select(record_id, study_arm, dateqolie = datefu, qolie, order, age = agefu), by = "record_id") %>% filter(!is.na(qolie))
+new0 = allq %>% filter(order == 3) %>% anti_join(allq %>% filter(order == 0) %>% select(record_id)) %>% select(record_id) %>% left_join(fcf_c %>% filter(redcap_repeat_instance == 1) %>% mutate(order = 0) %>% transmute(record_id, study_arm, dateqolie = as.IDate(datefu), qolie, order, age = agefu), by = "record_id") %>% filter(!is.na(qolie))
 
-qv1 = new0 %>% select(record_id) %>% left_join(allq) %>% filter(order != 2) %>% rename(qolie = score) %>% bind_rows(new0) %>% bind_rows(new0 %>% select(record_id) %>% left_join(fcf_c %>% filter(redcap_repeat_instance == 3) %>% mutate(order = 1) %>% select(record_id, study_arm, dateqolie = datefu, qolie, order, age = agefu), by = "record_id")) %>% bind_rows(qv) %>% filter(!is.na(qolie))
+qv1 = new0 %>% select(record_id) %>% left_join(allq) %>% filter(order != 2) %>% rename(qolie = score) %>% bind_rows(new0) %>% bind_rows(new0 %>% select(record_id) %>% left_join(fcf_c %>% filter(redcap_repeat_instance == 3) %>% mutate(order = 1) %>% transmute(record_id, study_arm, dateqolie = as.IDate(datefu), qolie, order, age = agefu), by = "record_id")) %>% bind_rows(qv) %>% filter(!is.na(qolie))
 
 interaction.plot(x.factor = qv1$order, #x-axis variable
                  trace.factor = qv1$study_arm, #variable for lines
@@ -489,10 +497,10 @@ summary(lm(qolie ~ factor(study_arm)*factor(order), qv1))
 *What was the age of the child when the first seizure happened?*
 
 ```{r onset-age}
-bs %>% filter(!is.na(onset_age)) %>% select(id = unique_id, study_arm, onset_age) %>% filter(!is.na(id)) %>% 
-  kable(caption = "Onset age is submitted in text") %>%
-  kable_styling() %>% 
-  scroll_box()
+# bs %>% filter(!is.na(onset_age)) %>% select(id = unique_id, study_arm, onset_age) %>% filter(!is.na(id)) %>% 
+#   kable(caption = "Onset age is submitted in text") %>%
+#   kable_styling() %>% 
+#   scroll_box()
 
 onsetAge = bs %>% filter(!is.na(onset_age)) %>% select(id = unique_id, study_arm, onset_age, age, dob, gender) %>% filter(!is.na(id)) %>% 
   mutate(onset_age = str_replace(onset_age, " and half", ".5"), onset_age = str_replace(onset_age, "and half", ".5"), onset_age =  str_replace_all(onset_age, c("one" = "1", "first" = "1","First" = "1", "A " = "1", "I" = "1", "One" = "1", "two" = "2", "Two" = "2", "second" = "2", "three" = "3", "Three" = "3", "third" = "3", "four" = "4", "five" = "5", "six" = "6","Six" = "6", "seven" = "7", "eight" = "8", "nine" = "9", "ten" = "10", "birth" = "0", "born" = "0", "At birht" = "0", "After Brith" = "0", "2019" = "2", "November 2014" = "4"))) %>%
@@ -501,7 +509,7 @@ onsetAge = bs %>% filter(!is.na(onset_age)) %>% select(id = unique_id, study_arm
 onsetAge %>% 
   filter(!is.na(onset)) %>%
   group_by(study_arm, gender) %>% 
-  summarize(meanOnsetAge = mean(onset), sdOnsetAge = sd(onset))
+  summarise(meanOnsetAge = mean(onset), sdOnsetAge = sd(onset))
 
 onsetAge %>% 
   ggplot(aes(x = onset)) + 
@@ -523,20 +531,20 @@ severe epilepsy, defined as an average seizure frequency of more than or equal t
 
 ```{r seizure-times}
 #melt
-preInterval = cbind(fudw['record_id'], stack(fudw[c("d01","d12", "d23", "d34", "d45", "d56", "d67", "d78", "d89", "d90")])) %>% mutate(instance = ifelse(ind == "d90", 10, as.numeric(ind[-1]))) %>% select(record_id, instance, interval = values)
+preInterval = cbind(fudw['record_id'], stack(fudw[c("d01","d12", "d23", "d34", "d45", "d56", "d67", "d78", "d89", "d90")])) %>% mutate(visit = ifelse(ind == "d90", 10, as.numeric(ind[-1]))) %>% select(record_id, visit, interval = values)
 
-seizure_tsc = fcf_c %>% filter(!is.na(expseiz) & study_arm == "TSC") %>% mutate(seiz_times = ifelse(is.na(how_many_seiz_v2), 0, how_many_seiz_v2)) %>% left_join(preInterval, by = c("record_id", "redcap_repeat_instance" = "instance")) %>% mutate(seiz_freq = 365.25/12 * seiz_times / interval)
-seizure_euc = fcf_c %>% filter(seize_since_last_euc_v2 != 2 & study_arm == "EUC") %>% mutate(seiz_times = ifelse(is.na(number_seiz), 0, number_seiz)) %>% left_join(preInterval, by = c("record_id", "redcap_repeat_instance" = "instance")) %>% mutate(seiz_freq = 365.25/12 * seiz_times / interval)
+seizure_tsc = fcf_c %>% filter(!is.na(expseiz) & study_arm == "TSC") %>% mutate(seiz_times = ifelse(is.na(how_many_seiz_v2), 0, how_many_seiz_v2)) %>% mutate(visit = as.numeric(redcap_repeat_instance)) %>% left_join(preInterval, by = c("record_id", "visit")) %>% mutate(seiz_freq = 365.25/12 * seiz_times / interval)
+seizure_euc = fcf_c %>% filter(seize_since_last_euc_v2 != 2 & study_arm == "EUC") %>% mutate(seiz_times = ifelse(is.na(number_seiz), 0, number_seiz)) %>% mutate(visit = as.numeric(redcap_repeat_instance)) %>% left_join(preInterval, by = c("record_id", "visit")) %>% mutate(seiz_freq = 365.25/12 * seiz_times / interval)
 seizure_times = rbind(seizure_tsc, seizure_euc) %>% filter(!is.na(seiz_freq) & seiz_freq != Inf)
 
-summary(lm(seiz_freq ~ factor(study_arm)*factor(redcap_repeat_instance) + agefu + factor(gender) + factor(city), seizure_times))
+summary(lm(seiz_freq ~ factor(study_arm)*factor(visit) + agefu + factor(gender) + factor(city), seizure_times))
 
-interaction.plot(x.factor = seizure_times$redcap_repeat_instance, #x-axis variable
+interaction.plot(x.factor = seizure_times$visit, #x-axis variable
                  trace.factor = seizure_times$study_arm, #variable for lines
                  response = seizure_times$seiz_freq, #y-axis variable
                  fun = mean, #metric to plot
                  ylab = "frequency of seizures (times per month)",
-                 xlab = "instance",
+                 xlab = "Visit",
                  col = c("pink", "blue"),
                  lty = 1, #line type
                  lwd = 2, #line width
@@ -550,54 +558,58 @@ seizure_times %>%
 
 # to get the decrease of DALY, we need to get the beginning DALY and final DALY for 2 arms
 seizure_times %>% mutate(severity = ifelse(seiz_freq >= 1, "severe epilepsy", "seizure-free, treated epilepsy")) %>%
-  group_by(study_arm, visit = redcap_repeat_instance) %>% count(severity) %>% mutate(pct = percent(n / sum(n))) %>% filter(severity == "severe epilepsy") %>% ungroup() %>%select(visit,n, pct) %>%
-  kable(caption="percent of severe epilepsy in 2 arms among 10 visits") %>% 
+  group_by(study_arm, visit) %>% count(severity) %>% mutate(pct = percent(n / sum(n))) %>% filter(severity == "severe epilepsy") %>% ungroup() %>% select(visit,n, pct) %>%
+  kable(caption="percent of severe epilepsy in 2 arms among 10 visits") %>%
   kable_styling(full_width = F, bootstrap_options = c("striped", "hover")) %>%
   pack_rows("EUC",1,10) %>%
   pack_rows("TSC",11,20)
-
-cat("set limits for outliners: [Q1-1.5*IQR, Q3+1.5*IQR]")
-
-# delete outliners
-quartiles <- quantile(seizure_times$seiz_freq, probs=c(.25, .75), na.rm = FALSE)
-IQR <- IQR(seizure_times$seiz_freq)
-Lower <- quartiles[1] - 1.5*IQR
-Upper <- quartiles[2] + 1.5*IQR 
-seizure_times %>% filter(seiz_freq > Lower & seiz_freq < Upper) %>% mutate(severity = ifelse(seiz_freq >= 1, "severe epilepsy", "seizure-free, treated epilepsy")) %>%
-  group_by(study_arm, visit = redcap_repeat_instance) %>% count(severity) %>% mutate(pct = percent(n / sum(n))) %>% ungroup() %>%select(-study_arm) %>% 
-  kable(caption="percent of epilepsy classes in 2 arms among 10 visits without outliners") %>% 
-  kable_styling(full_width = F, bootstrap_options = c("striped", "hover")) %>%
-  pack_rows("EUC",1,20) %>%
-  pack_rows("TSC",21,40)
+# 
+# cat("set limits for outliners: [Q1-1.5*IQR, Q3+1.5*IQR]")
+# 
+# # delete outliners
+# quartiles <- quantile(seizure_times$seiz_freq, probs=c(.25, .75), na.rm = FALSE)
+# IQR <- IQR(seizure_times$seiz_freq)
+# Lower <- quartiles[1] - 1.5*IQR
+# Upper <- quartiles[2] + 1.5*IQR 
+# seizure_times %>% filter(seiz_freq > Lower & seiz_freq < Upper) %>% mutate(severity = ifelse(seiz_freq >= 1, "severe epilepsy", "seizure-free, treated epilepsy")) %>%
+#   group_by(study_arm, visit = redcap_repeat_instance) %>% count(severity) %>% mutate(pct = percent(n / sum(n))) %>% ungroup() %>%select(-study_arm) %>% 
+#   kable(caption="percent of epilepsy classes in 2 arms among 10 visits without outliners") %>% 
+#   kable_styling(full_width = F, bootstrap_options = c("striped", "hover")) %>%
+#   pack_rows("EUC",1,20) %>%
+#   pack_rows("TSC",21,40)
 ```
+
+As the intervals between screening and follow up visit 1 is not as scheduled stably as intervals between visits, we may use the reported seizure frequency in the Follow up visit 2(the 2th in the plot) as the baseline.
 
 ## Calculation of DALY
 
 DALY = YLL + YLD, while the kind and severity of disease will impact the disability weight for YLD.
 
-For severe epilepsy: 0.552
+The YLD can be computed based on factor of I × DW × L with uniform age weights and zero discounting, where, I represents the number of incident cases of childhood epilepsy in a reference period, DW is the disability weight (0--1), and L is the mean duration of disability (years) ([Murray and Lopez, 1996](https://www.sciencedirect.com/science/article/pii/S0920121116300699#bib0060)).
 
-For seizure-free, treated epilepsy: 0.049
+**For severe epilepsy: 0.552; For seizure-free, treated epilepsy: 0.049 (GBD, 2016). ---** the severity of disability was weighted between 0 (perfect health) and 1 (equivalent to death).
 
 For the population, the DALYs will be calculated by disease, country, gender, average age of onset, average age of death, incident cases and incident deaths. -- as the country and gender will determine the life expectancy at age of premature death.
 
 Just for our dataset, it is impossible to gain the individual age of death. So we need to look for the average age of death for childhood epilepsy in Nigeria. -- As few literature in this region, it is hard to get.
 
-The first way is to use DALY from literature: 4.1 DALYs per 1000 individuals annually (Wagner, etc, 2015)[<https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0145300>]
+**The first way** is to use DALY from literature: 4.1 DALYs per 1000 individuals annually (Wagner, etc, 2015)[<https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0145300>] or 2.18 DALYs for children within the age group of 5-14 years(Ughasoro, etc, 2016) [<https://www.sciencedirect.com/science/article/pii/S0920121116300699>]
 
-as the number use an average disability weight, it is able to infer the DALY for severe and seizure free conditions.
+as both numbers use an average disability weight, it is difficult but able to infer the DALY for severe and seizure free conditions.
 
-As our 2 arms have different percents of serverity, we can calculate the DALYs for each group.
+As our 2 arms have different percents of severity, we can calculate the DALYs for each group.
 
-The second way serves for the cost-effectiveness.
+**The second way** serves for the cost-effectiveness.
 
 Incremental effectiveness = DALY_TSC - DALY_EUC = YLL_TSC + YLD_TSC - YLL_EUC - YLD_EUC
 
 As the two arms we have almost the same onset age, and we will also use the same age of premature death for 2 arms, YLL_TSC = YLL_EUC
 
-Incremental effectiveness = YLD_TSC - YLD_EUC = (Disability_weight_TSC - Disability_weight_EUC) \* living_years
+Incremental effectiveness = YLD_TSC - YLD_EUC \~ (Disability_weight_TSC - Disability_weight_EUC) \* living_years
 
-If compare them annually per 1000 individuals, incremental effectiveness using DALY weight for each year for the same population size = (4% \* 0.552 + 96% *0.049) - (9%* \* 0.552 + 91% \* 0.049)
+If compare them **annually per 1000 individuals,** incremental effectiveness using DALY weight for each year for the same population size = **(3% \* 0.552 + 97% *0.049) - (9%* \* 0.552 + 91% \* 0.049)**
+
+Although we can't get an exact DALY for each arm, the cost-effectiveness analysis is more precise.
 
 # strengths and limitations
 
@@ -611,9 +623,9 @@ If compare them annually per 1000 individuals, incremental effectiveness using D
 1.  The records is not so complete: not all people complete the scale(especially the QOLIE) on the time and meeting the eligibility
 2.  Lots of assumptions has been made to clean the data
 
-# Questions for Aim 3 Meeting
+## Future work
 
-## Content of Aim 3 in the protocol
+Content of Aim 3 in the protocol:
 
 **Determine the cost-effectiveness of the task-shifted epilepsy care intervention.**
 
@@ -622,7 +634,5 @@ Direct costs of the intervention and EUC will include personnel costs (including
 Indirect costs will include travel time and time away from work for parents/guardians and change in school attendance for patients.
 
 Cost-effectiveness will be expressed as US dollars per disability adjusted life year (DALY) averted.
-
-## Progress of our work
 
 Half-way to find the effectiveness of TSC.

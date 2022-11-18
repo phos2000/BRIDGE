@@ -15,13 +15,13 @@ knitr::opts_chunk$set(message = FALSE)
 library(tidyverse)
 library(knitr)
 library(scales)
+library(data.table)
 library(lubridate)
 library(kableExtra)
 library(stats)
 ```
 
 ```{r data}
-setwd("~/Documents/GitHub/BRIDGE")
 fu <- data.table::fread("../data/FollowDat.csv")
 bs <- data.table::fread("../data/BaseDat.csv")
 ```
@@ -122,8 +122,8 @@ basedate = fu %>% filter(redcap_repeat_instrument=="diag_enroll") %>%
   mutate(age = round(as.numeric(datebaseline - bd)/365.25,1))
 
 fudw <- fu %>% filter(redcap_repeat_instrument=="follow_up_care_form") %>%
-  select(record_id,visit=redcap_repeat_instance,study_arm,datefu,age = agefu) %>% 
-  mutate(date=as_date(datefu)) %>% select(-datefu) %>%
+  select(record_id,study_arm,visit = redcap_repeat_instance,datefu,age = agefu) %>% 
+  mutate(date=as_date(datefu), visit=as.numeric(visit)) %>% select(-datefu) %>%
   bind_rows(basedate %>% select(record_id,study_arm,date = datebaseline,age) %>% mutate(visit=0)) %>%
   pivot_wider(names_from = visit,
               values_from = c(date,age)) %>% 
