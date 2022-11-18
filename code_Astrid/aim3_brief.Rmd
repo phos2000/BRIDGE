@@ -573,7 +573,11 @@ seizure_times %>% filter(seiz_freq > Lower & seiz_freq < Upper) %>% mutate(sever
 
 ## Calculation of DALY
 
-DALY = YLL + YLD, while the kind and severity of disease will impact the disability weight for YLD. For severe epilepsy: 0.552 For seizure-free, treated epilepsy: 0.049
+DALY = YLL + YLD, while the kind and severity of disease will impact the disability weight for YLD.
+
+For severe epilepsy: 0.552
+
+For seizure-free, treated epilepsy: 0.049
 
 For the population, the DALYs will be calculated by disease, country, gender, average age of onset, average age of death, incident cases and incident deaths. -- as the country and gender will determine the life expectancy at age of premature death.
 
@@ -585,13 +589,15 @@ as the number use an average disability weight, it is able to infer the DALY for
 
 As our 2 arms have different percents of serverity, we can calculate the DALYs for each group.
 
-The second way serves for the cost-effectiveness. Incremental effectiveness = DALY_TSC - DALY_EUC = YLL_TSC + YLD_TSC - YLL_EUC - YLD_EUC
+The second way serves for the cost-effectiveness.
+
+Incremental effectiveness = DALY_TSC - DALY_EUC = YLL_TSC + YLD_TSC - YLL_EUC - YLD_EUC
 
 As the two arms we have almost the same onset age, and we will also use the same age of premature death for 2 arms, YLL_TSC = YLL_EUC
 
 Incremental effectiveness = YLD_TSC - YLD_EUC = (Disability_weight_TSC - Disability_weight_EUC) \* living_years
 
-If compare them annually per 1000 individuals, incremental effectiveness using DALY weight for each year for the same population size = (4% \* 0.552 + 96% *0.049) - (9%* 0.552 + 91% \* 0.049)
+If compare them annually per 1000 individuals, incremental effectiveness using DALY weight for each year for the same population size = (4% \* 0.552 + 96% *0.049) - (9%* \* 0.552 + 91% \* 0.049)
 
 # strengths and limitations
 
