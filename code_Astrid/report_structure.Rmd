@@ -21,6 +21,7 @@ library(stats)
 ```
 
 ```{r data}
+setwd("~/Documents/GitHub/BRIDGE")
 fu <- data.table::fread("../data/FollowDat.csv")
 bs <- data.table::fread("../data/BaseDat.csv")
 ```
@@ -738,7 +739,7 @@ order1 = allqolie_c %>% anti_join(order0) %>% anti_join(order3) %>% anti_join(or
 ## bind
 allq = bind_rows(order0, order1, order2, order3)
 
-save(fu, bs, allq, fcf_c, gender, fudw, gender, location, dob, file = "with-drop-out.rda")
+save(fu, bs, allq, fcf, fcf_c, gender, fudw, gender, location, dob, repeated, allqolie, order2, file = "with-drop-out.rda")
 ```
 
 ```{r comparison-drop-out}
@@ -747,7 +748,7 @@ allq = allq %>%
 
 fcf_c = fcf_c %>% anti_join(fu %>% filter(reason != 1) %>% distinct(study_arm,record_id))
 
-save(fu, bs, allq, fcf, fcf_c, gender, fudw, gender, location, dob, file = "without-drop-out.rda")
+save(fu, bs, allq, fcf, fcf_c, gender, fudw, gender, location, dob, repeated, allqolie, order2, file = "without-drop-out.rda")
 ```
 # Results
 

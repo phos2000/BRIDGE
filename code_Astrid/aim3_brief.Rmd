@@ -22,18 +22,26 @@ library(kableExtra)
 # Analysis and Result Briefs
 
 ```{r read-vas-data}
-# fu <- data.table::fread("../data/FollowDat.csv")
-# load("orginial_qolie.rda")
-# load("all_qolie_together.rda")
-# load("re_qolie.rda")
-
 load("with-drop-out.rda")
+```
+
+## dropout rate
+
+Although the drop-out rate is more than 10%, the result of our analysis don't have a evident difference. So we include the records of participants who have been terminated without completion.
+
+```{r drop-out}
+fu %>%
+  filter(reason != 1) %>%
+  distinct(study_arm,record_id) %>% count(study_arm) %>% rename(drop_out = n) %>%
+  left_join(fu %>% distinct(study_arm,record_id) %>% count(study_arm)) %>%
+  mutate(pct = percent(drop_out/n)) %>% select(-n) %>%
+  kable(caption = "percent of drop-outs in 2 arms") %>%
+  kable_styling()
 ```
 
 ## QOLIE(QOLIE-31 & QOLIE-AD-48)
 
 ### the Inclusion Criteria of QOLIE records
-
 
 **Source**
 
@@ -51,19 +59,21 @@ For every participant, if there exists 2 QOLIE records on the same day,
 
 3.  if still the same, choose the one with bigger *instance*.
 
+There are `r nrow(repeated)` participants have 2 or more QOLIE records on the same day, the max times is `r max(repeated$repeattime)`.
+
 **Logic for i-th QOLIE**
 
 For every participant,
 
 1.  the baseline date is obtained from *date_consent_screen* or *dataconsentenroll*, choosing one based on *ev0*;
 
-2.  0th QOLIE(**first**): the first occurence of QOLIE records, no matter whether the date is on or before or after the baseline date, and no matter whether the record is from Screening or Follow up Visits, except from one case: the date is after "2022-01-01";
+2.  0th QOLIE(**first**): the first occurence of QOLIE records, no matter whether the date is on or **before** or **after** the baseline date, and no matter whether the record is from Screening or Follow up Visits, except from one case: the date is after "2022-01-01"; -- There are `r nrow(allq %>% filter(order == 0) %>% filter(dateqolie > datebaseline))` records of 0th order with the date later than the baseline date.
 
 3.  3rd QOLIE(**last**): the last time of QOLIE records and the date is after "2022-01-01". For those who have only one time QOLIE record, if the date is after "2022-01-01", the record will be labeled as the 3-rd, as the participants are only old enough(\>11) for the last time of visits(maybe we can compare their previous VAS score and this time of QOLIE);
 
 4.  1st or 2nd: the ones between the 0th and 3rd. For participants with 4 times of QOLIE and participants with 2 times of after-"2022-01-01" QOLIE, the 2nd will be filled -- they could also be dropped as they are not so consistent with the schedule;
 
-5.  For the records with "NA" dates, the order will depend on the *instance*. I prefer to put them on the 2nd, as they might be dropped as the data includes too much noises.
+5.  For the `r nrow(order2 %>% filter(is.na(dateqolie)))` records with "NA" dates, the order will depend on the *instance*. I prefer to put them on the 2nd, as they might be dropped when building models as the data includes too much noises.
 
 ### Missing Rate for QOLIE
 
@@ -98,7 +108,20 @@ allq %>% group_by(study_arm, order) %>%
   kable_styling(full_width = F, bootstrap_options = c("striped", "hover")) %>%
   pack_rows("EUC",1,4) %>%
   pack_rows("TSC",5,8)
+
+allq %>% group_by(study_arm, order, type) %>% 
+  summarise(n_records = n(), mean_score = mean(score), sd_score = sd(score)) %>%
+  group_by(study_arm) %>%
+  mutate(pct_by_arm = percent(n_records / sum(n_records))) %>% 
+  ungroup() %>%
+  select(order, type, n_records, pct_by_arm, mean_score, sd_score) %>%
+  kable(caption="QOLIE records by order") %>% 
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover")) %>%
+  pack_rows("EUC",1,8) %>%
+  pack_rows("TSC",9,16)
 ```
+
+Totally, there are `r nrow(allq %>% filter(type == "QOLIE-31") %>% distinct(record_id))` participants having at least one time of QOLIE-31 -- totally `r nrow(allq %>% filter(type == "QOLIE-31"))` records.
 
 #### Time distribution for QOLIE times
 
@@ -116,6 +139,8 @@ allq %>%
 
 #### Complete Rate of the instruments
 
+Right now we don't delete the records due to the complete rate of the instruments -- something we might do later.
+
 ```{r miss-item}
 allq %>% 
   mutate(base = ifelse(type == 'QOLIE-AD-48', 47, 31), miss_item_p = (base - miss_item) / base, miss_item_pct = ifelse(miss_item_p == 1, '100%', ifelse(miss_item_p < 1 & miss_item_p >= 0.9, '90% - 99%', ifelse(miss_item_p < 0.9 & miss_item_p >= 0.8, '80% - 89%', 'below 80%')))) %>%
@@ -132,11 +157,12 @@ allq %>%
   pack_rows("TSC",5,8) %>%
   scroll_box()
 
-ggplot(data=allq) + 
-  geom_histogram(aes(x=miss_item),binwidth = 1) +
+ggplot(data=allq, aes(x=miss_item)) + 
+  geom_histogram(binwidth = 1) +
+  stat_bin(binwidth=1, geom="text", aes(label=..count..), vjust = -0.25) +
   facet_grid(type~study_arm) +
   theme_minimal() +
-  xlab("Number of missing item") + ylab("Freq") +
+  xlab("Number of missing item") + ylab("Freq") + ylim(c(0, 800)) + 
   ggtitle("Missing items among the questions in QOLIE")
 ```
 
@@ -180,6 +206,8 @@ ggplot(allq %>% mutate(elig = factor(ifelse(type == eligibility, "Correct", "Ine
 ```
 
 ### Distribution of QOLIE Scores
+
+As the 2th records include lots of noises and have a small sample for both 2 arms, we may exclude it in the later analysis. The other 3 parts show a normal distribution shape and a small increasing tendency for the average score.
 
 ```{r qolie-scores}
 allq %>% group_by(study_arm, order) %>% 
@@ -239,11 +267,21 @@ interaction.plot(x.factor = qinfo$order, #x-axis variable
 
 When trying to explain the group difference among the times and the arms,
 
-Although the main effect of Treatment is even unsignificantly negative (as the total mean of EUC and TSC is so close), **which may caused by the group difference when sampling**,
+The intercept is the QOLIE score of EUC arm on the 0th order.
 
-the main effect of order is marginally(with p 0.05- 0.1) significantly positive -- as time goes by (**may caused by more treatment, changes in life, age grows**), the QOLIE score improves;
+For the 0th records, the difference between 2 arms is not significant.
 
-the interaction of order and arm (TSC over EUC, order 3rd over order 0th) is significantly positive.
+the main effect of order is kind of significantly(1th over 0th: p \< 0.1, marginal significant; 3th over 0th, p \< 0.05, siginificant) positive -- as time goes by (**may caused by more treatment, changes in life, age grows**), the QOLIE score improves.
+
+Not find any evidence that the TSC has a better effect than EUC on every visit.
+
+The lm formula creates several dummy variables:
+
+*TSC*, for TSC arm is 1 and EUC arm is 0;
+
+*order1* and *order3*, for 0th having both 2 are 0, 1th for only order1 = 1 and 3th for only order3 = 1.
+
+$$QOLIE = 48.2602 + 0.2808 * TSC + 2.3254 * order1 + 4.0736 * order3 - 1.0734*TSC*order1 + 2.4071 * TSC*order3$$
 
 ```{r lm-age}
 summary(lm(score ~ factor(study_arm)*factor(order) + age, qinfo))
@@ -253,9 +291,11 @@ ggplot(qinfo,aes(x = age, y = score, color = order)) +
   geom_smooth(method='lm')
 ```
 
-**Age plays a role over time** -- the order is no longer have a mariginal significance.
+**Age plays a small role over time** -- the increasing age interpret part of the increasing QOLIE over visits and time. The order is no longer have a significance effect.
 
-But **the interaction still works**.
+the lm formula is (only age is not a dummy variable):
+
+$$QOLIE = 34.4684 + 0.2764 * TSC + 2.1276 * order1 + 2.3020 * order3 - 1.0592*TSC*order1 + 2.4055 * TSC*order3 + 0.9673 * age$$
 
 ```{r lm-gender}
 summary(lm(score ~ factor(study_arm)*factor(order) + factor(gender), qinfo))
@@ -264,20 +304,22 @@ summary(lm(score ~ factor(study_arm)*factor(order) + factor(gender), qinfo))
 **Gender plays no role.**
 
 ```{r lm-city}
-summary(lm(score ~ factor(study_arm)*factor(order) + factor(city), qinfo))
+summary(lm(score ~ factor(study_arm)*factor(order) + age + factor(city), qinfo))
 ```
 
-**City plays a role for Zaria has smaller score compared to Keduna.**
+**City plays a role that Zario \< Keduna \< Kano.**
+
+$$QOLIE = 37.1040 - 0.2749 * TSC + 2.0220 * order1 + 2.5715 * order3 - 0.9587*TSC*order1 + 2.4058 * TSC*order3 \\ + 0.8201 * age + 2.0518 * Kano - 3.7943 * Zaria$$
 
 ## VAS
 
 ### Inclusion Criteria
 
-1. if the *missed_fu* is like "no" or "on time", include no matter any missing. There're `r nrow(fcf %>% filter(missed_fu %in% c("No", "No missed", "None", "N0", "Not missed", "NO", "No miss", "No missing", "No messing", "No missen", "0", "On time")))` records(`r nrow(fcf %>% filter(missed_fu %in% c("No", "No missed", "None", "N0", "Not missed", "NO", "No miss", "No missing", "No messing", "No missen", "0", "On time")))*100/nrow(fcf)` % of all) meeting the conditions.
+1.  if the *missed_fu* is like "no" or "on time", include no matter any missing. There're `r nrow(fcf %>% filter(missed_fu %in% c("No", "No missed", "None", "N0", "Not missed", "NO", "No miss", "No missing", "No messing", "No missen", "0", "On time")))` records(`r nrow(fcf %>% filter(missed_fu %in% c("No", "No missed", "None", "N0", "Not missed", "NO", "No miss", "No missing", "No messing", "No missen", "0", "On time")))*100/nrow(fcf)` % of all) meeting the conditions.
 
-2. if the *missed_fu* is **NA** or "Visit Done", inclusion depends on whether they filled all of *follow_up_care_form_complete*, *confirmseize*, *weight_fu_v2*, *seizeclass*. There 're `r nrow(fcf %>% filter(((str_detect(missed_fu, "Visit done") | str_detect(missed_fu, "Visit Done") | is.na(missed_fu)) & incomplete == 0)))` records (`r nrow(fcf %>% filter(((str_detect(missed_fu, "Visit done") | str_detect(missed_fu, "Visit Done") | is.na(missed_fu)) & incomplete == 0)))*100/nrow(fcf)` % of all) meeting the conditions.
+2.  if the *missed_fu* is **NA** or "Visit Done", inclusion depends on whether they filled all of *follow_up_care_form_complete*, *confirmseize*, *weight_fu_v2*, *seizeclass*. There 're `r nrow(fcf %>% filter(((str_detect(missed_fu, "Visit done") | str_detect(missed_fu, "Visit Done") | is.na(missed_fu)) & incomplete == 0)))` records (`r nrow(fcf %>% filter(((str_detect(missed_fu, "Visit done") | str_detect(missed_fu, "Visit Done") | is.na(missed_fu)) & incomplete == 0)))*100/nrow(fcf)` % of all) meeting the conditions.
 
-3. if the *missed_fu* answers something else, exclude. There're `r nrow(fcf %>% filter(missed == 1))` records (`r nrow(fcf %>% filter(missed == 1))*100/nrow(fcf)` % of all) excluded. 
+3.  if the *missed_fu* answers something else, exclude. There're `r nrow(fcf %>% filter(missed == 1))` records (`r nrow(fcf %>% filter(missed == 1))*100/nrow(fcf)` % of all) excluded.
 
 ### Demographic
 
@@ -311,31 +353,257 @@ fcf_c %>%
   xlab("VAS") + ylab("Freq") +
   ggtitle("Distribution of valid scores")
 ```
+
 #### Main effects and interactions of study arms and visit times
 
-For the cost-effectiveness analysis, we need to compare the utilities between the two arms along with the 10 follow up visits. 
+For the cost-effectiveness analysis, we need to compare the utilities between the two arms along with the 10 follow up visits. Study arm is a two-level factor as EUC is the control group and TSC is the treatment group. lm function creates a dummy variable named TSC(the line: **factor(study_arm) TSC**) that *TSC* = 1 for TSC group and *TSC* = 0 for EUC group.
 
-Study arm is a two-level factor as EUC is the control group and TSC is the treatment group. The main effect of study arm itself, is 
+The main effect of visits is to use the Screening (**visit 0**) as the baseline. There are 10 dummy variables for all follow-up visits: if all are 0, it refers to the screening visit; if *visit1* = 1, the others should all be 0 and this refers to Follow-up Visit 1.
+
+The interaction shows the expected difference in the effect of the N-th visit(compared to the screening) for TSC participants versus EUC participants. For example, **factor(study_arm)TSC:factor(visit)1** means *visit1* = 1 and *TSC* = 1, which compares the VAS of the TSC arm on the first follow-up visit with that of the EUC arm. If it is the screening visit or in EUC arm, all the interaction portions will be zero.
+
+The intercept, is the average VAS of screening visit in EUC arm.
+
+The linear model formula is:
+
+$$VAS = 48.564 + 3.804*TSC + 5.090*Visit_1 + 7.981*Visit_2 + 12.403 * Visit_3 + 15.246*Visit_4 + 19.874 * Visit_5 \\
+ + 22.715*Visit_6 + 26.013 * Visit_7 + 29.775 * Visit_8 + 30.112 * Visit_9 + 31.555 * Visit_{10} \\
+ + 2.287 * TSC * Visit_1 + 5.476 * TSC * Visit_2 + 4.390 * TSC * Visit_3 + 5.996 * TSC * Visit_4 + 4.221 * TSC * Visit_5 \\
+ + 5.384 * TSC * Visit_6 + 5.252 * TSC * Visit_7 + 5.656 * TSC * Visit_8 + 6.045 * TSC * Visit_9 + 6.560 * TSC * Visit_{10} $$
 
 ```{r lm}
 summary(lm(qolie ~ factor(study_arm)*factor(redcap_repeat_instance), fcf_c))
+
+fcf_i = fcf_c %>% filter(!is.na(qolie)) %>% select(record_id, study_arm, visit = redcap_repeat_instance, qolie, age = agefu, gender, city) %>% mutate(gender = ifelse(gender == 1, "Female", "Male")) %>% bind_rows(bs %>% filter(qolie_48_1117_v0_complete == "2") %>% select(record_id = unique_id, study_arm, qolie = vas_qolie_48, age, gender, city) %>% mutate(visit = 0))
+
+summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))
+
+interaction.plot(x.factor = fcf_i$visit, #x-axis variable
+                 trace.factor = fcf_i$study_arm, #variable for lines
+                 response = fcf_i$qolie, #y-axis variable
+                 fun = mean, #metric to plot
+                 fixed = TRUE, 
+                 ylab = "QOLIE Score (marginal mean)",
+                 xlab = "Follow-up Visits",
+                 col = c("pink", "blue"),
+                 lty = 1, #line type
+                 lwd = 2, #line width
+                 trace.label = "Study Arm")
 ```
 
-**Main effect of arms, instances and interactions of arms and instances are all significant.**  
+**the number of \* shows the level of significance. Here, from the interaction parts, we can find the score of TSC is significantly higher than EUC for every visit.**
+
+**For the screening visit, the score of TSC is 3.804 higher than the EUC(p = 0.02 shows significant group difference in the popularity). The difference expands over the visits(3.804 + 2.287 for Visit 1 until 3.804 + 6.560 for Visit 10).**
+
+```{r age-lm}
+
+summary(lm(qolie ~ age, fcf_i))
+
+fcf_a = bind_cols(fcf_i %>% filter(!is.na(age)), residuals(lm(qolie ~ age, fcf_i)))
+colnames(fcf_a)[8] = "age_residual" 
+
+summary(lm(age_residual ~ factor(study_arm)*factor(visit), fcf_a))
+
+interaction.plot(x.factor = fcf_a$visit, #x-axis variable
+                 trace.factor = fcf_a$study_arm, #variable for lines
+                 response = 69.57732 + fcf_a$age_residual, #y-axis variable
+                 fun = mean, #metric to plot
+                 fixed = TRUE, 
+                 ylab = "the QOLIE Score excluded the covariance effect of age",
+                 xlab = "Follow-up Visits",
+                 col = c("pink", "blue"),
+                 lty = 1, #line type
+                 lwd = 2, #line width
+                 trace.label = "Study Arm")
+```
+
+As it cost 2 years for the whole process, the kids may have improved VAS just due to the increasing age, while age is not a element of our research interest-- that's why we add age as a covariant.
+
+age plays a role to interpret the increasing tendency of VAS over 10 visits, but the Task-shift treatment still have better effects than the the control group proved to be significant from the interaction estimates.
 
 ```{r more-lm}
-summary(lm(qolie ~ factor(study_arm)*factor(redcap_repeat_instance) + agefu, fcf_c))
-
-cat("age plays a role but the factors still have siginificant effects. ")
-
-summary(lm(qolie ~ factor(study_arm)*factor(redcap_repeat_instance) + factor(gender), fcf_c))
+summary(lm(qolie ~ factor(study_arm)*factor(visit) + factor(gender), fcf_i))
 
 cat("There is no difference between the genders. ")
 
-summary(lm(qolie ~ factor(study_arm)*factor(redcap_repeat_instance) + factor(city), fcf_c))
+summary(lm(qolie ~ factor(study_arm)*factor(visit) + factor(city), fcf_i))
 
 cat("As for the cities, Keduna > Kano > Zaria")
 ```
+
+As city is one of the variable of our interest, we include it into the linear model and find that participants in different cities will have significantly different average VAS.
+
+# Comparison between VAS and QOLIE
+
+the only question is that in the Screening questionnaire, the VAS is contained in the QOLIE survey -- so only people having the 0th QOLIE will be able to have the baseline VAS.
+
+We can still try to use the first follow-up visit VAS(which is in the follow up care form) as the 1st if they don't have. The 1st should be Month 2, so we use instance 3 VAS to add.
+
+```{r VAS-QOLIE}
+qv = allq %>% filter(order == 0) %>% select(record_id) %>% inner_join(allq %>% filter(order == 3), by = "record_id") %>% select(record_id) %>% left_join(allq) %>% filter(order != 2) %>% count(record_id) %>% filter(n < 3) %>% select(-n) %>% left_join(fcf_c %>% filter(redcap_repeat_instance == 3) %>% mutate(order = 1) %>% select(record_id, study_arm, dateqolie = datefu, qolie, order, age = agefu), by = "record_id")  %>% filter(!is.na(qolie)) %>% bind_rows(allq %>% filter(order == 0) %>% select(record_id) %>% inner_join(allq %>% filter(order == 3), by = "record_id") %>% select(record_id) %>% left_join(allq) %>% filter(order != 2) %>% rename(qolie = score))
+
+summary(lm(qolie ~ factor(study_arm)*factor(order), qv))
+
+interaction.plot(x.factor = qv$order, #x-axis variable
+                 trace.factor = qv$study_arm, #variable for lines
+                 response = qv$qolie, #y-axis variable
+                 fun = mean, #metric to plot
+                 ylab = "QOLIE Score (marginal mean)",
+                 xlab = "Order of QOLIE",
+                 col = c("pink", "blue"),
+                 lty = 1, #line type
+                 lwd = 2, #line width
+                 trace.label = "Study Arm")
+```
+
+As we didn't add many samples, the result seems similar.
+
+originally, we have `r nrow(allq %>% filter(order == 0))` order0 records and `r nrow(allq %>% filter(order == 3))` order3 records, while they are not overlapped at some degree. Now we have `r nrow(allq %>% filter(order == 0) %>% select(record_id) %>% inner_join(allq %>% filter(order == 3), by = "record_id") %>% select(record_id) %>% left_join(allq) %>% filter(order != 2) %>% filter(order == 0))` participants with order0, order1, order3 qolie records.
+
+## using the first follow-up(1th) VAS as the baseline for those don't have the 0th QOLIE
+
+```{r vas-0thqolie}
+new0 = allq %>% filter(order == 3) %>% anti_join(allq %>% filter(order == 0) %>% select(record_id)) %>% select(record_id) %>% left_join(fcf_c %>% filter(redcap_repeat_instance == 1) %>% mutate(order = 0) %>% select(record_id, study_arm, dateqolie = datefu, qolie, order, age = agefu), by = "record_id") %>% filter(!is.na(qolie))
+
+qv1 = new0 %>% select(record_id) %>% left_join(allq) %>% filter(order != 2) %>% rename(qolie = score) %>% bind_rows(new0) %>% bind_rows(new0 %>% select(record_id) %>% left_join(fcf_c %>% filter(redcap_repeat_instance == 3) %>% mutate(order = 1) %>% select(record_id, study_arm, dateqolie = datefu, qolie, order, age = agefu), by = "record_id")) %>% bind_rows(qv) %>% filter(!is.na(qolie))
+
+interaction.plot(x.factor = qv1$order, #x-axis variable
+                 trace.factor = qv1$study_arm, #variable for lines
+                 response = qv1$qolie, #y-axis variable
+                 fun = mean, #metric to plot
+                 ylab = "QOLIE Score (marginal mean)",
+                 xlab = "Order of QOLIE",
+                 col = c("pink", "blue"),
+                 lty = 1, #line type
+                 lwd = 2, #line width
+                 trace.label = "Study Arm")
+
+summary(lm(qolie ~ factor(study_arm)*factor(order), qv1))
+
+```
+
+# DALY
+
+## age of onset of disease
+
+*What was the age of the child when the first seizure happened?*
+
+```{r onset-age}
+bs %>% filter(!is.na(onset_age)) %>% select(id = unique_id, study_arm, onset_age) %>% filter(!is.na(id)) %>% 
+  kable(caption = "Onset age is submitted in text") %>%
+  kable_styling() %>% 
+  scroll_box()
+
+onsetAge = bs %>% filter(!is.na(onset_age)) %>% select(id = unique_id, study_arm, onset_age, age, dob, gender) %>% filter(!is.na(id)) %>% 
+  mutate(onset_age = str_replace(onset_age, " and half", ".5"), onset_age = str_replace(onset_age, "and half", ".5"), onset_age =  str_replace_all(onset_age, c("one" = "1", "first" = "1","First" = "1", "A " = "1", "I" = "1", "One" = "1", "two" = "2", "Two" = "2", "second" = "2", "three" = "3", "Three" = "3", "third" = "3", "four" = "4", "five" = "5", "six" = "6","Six" = "6", "seven" = "7", "eight" = "8", "nine" = "9", "ten" = "10", "birth" = "0", "born" = "0", "At birht" = "0", "After Brith" = "0", "2019" = "2", "November 2014" = "4"))) %>%
+  mutate(onset = ifelse(str_detect(onset_age, "Last month"), round(age - 1/12), ifelse(str_detect(onset_age, "d")|str_detect(onset_age, "D"), round(parse_number(onset_age)/365.25), ifelse(str_detect(onset_age, "y") & (str_detect(onset_age, "(6|8)( |)m")), round(parse_number(onset_age) + 1), ifelse(str_detect(onset_age, "y")|str_detect(onset_age, "Y"), round(parse_number(onset_age)), ifelse(str_detect(onset_age, "m")|str_detect(onset_age, "M"), round(parse_number(onset_age)/12), ifelse(str_detect(onset_age, "w")|str_detect(onset_age, "W"), round(parse_number(onset_age)/52), parse_number(onset_age))))))))
+
+onsetAge %>% 
+  filter(!is.na(onset)) %>%
+  group_by(study_arm, gender) %>% 
+  summarize(meanOnsetAge = mean(onset), sdOnsetAge = sd(onset))
+
+onsetAge %>% 
+  ggplot(aes(x = onset)) + 
+  geom_histogram(binwidth = 1) +
+  facet_grid(study_arm ~ gender) + 
+  stat_bin(binwidth=1, geom="text", aes(label=..count..), vjust = -0.25) +
+  theme_minimal() +
+  xlab("Age (in years)") + ylab("Freq") +
+  ggtitle("Onset Age Distribution for 2 arms")
+```
+
+## severity
+
+we can use the frequency to get the severity.
+
+severe epilepsy, defined as an average seizure frequency of more than or equal to once per month; less severe epilepsy with a seizure frequency of less than once a month, or no seizures in the past year while untreated but still fulfilling the criteria of active epilepsy; and seizure-free, treated epilepsy, defined as not having seizures in the past year while on treatment.
+
+**The only question is that all the patients in our researsh should be considered as under treatment if they have less severe epilepsy.**
+
+```{r seizure-times}
+#melt
+preInterval = cbind(fudw['record_id'], stack(fudw[c("d01","d12", "d23", "d34", "d45", "d56", "d67", "d78", "d89", "d90")])) %>% mutate(instance = ifelse(ind == "d90", 10, as.numeric(ind[-1]))) %>% select(record_id, instance, interval = values)
+
+seizure_tsc = fcf_c %>% filter(!is.na(expseiz) & study_arm == "TSC") %>% mutate(seiz_times = ifelse(is.na(how_many_seiz_v2), 0, how_many_seiz_v2)) %>% left_join(preInterval, by = c("record_id", "redcap_repeat_instance" = "instance")) %>% mutate(seiz_freq = 365.25/12 * seiz_times / interval)
+seizure_euc = fcf_c %>% filter(seize_since_last_euc_v2 != 2 & study_arm == "EUC") %>% mutate(seiz_times = ifelse(is.na(number_seiz), 0, number_seiz)) %>% left_join(preInterval, by = c("record_id", "redcap_repeat_instance" = "instance")) %>% mutate(seiz_freq = 365.25/12 * seiz_times / interval)
+seizure_times = rbind(seizure_tsc, seizure_euc) %>% filter(!is.na(seiz_freq) & seiz_freq != Inf)
+
+summary(lm(seiz_freq ~ factor(study_arm)*factor(redcap_repeat_instance) + agefu + factor(gender) + factor(city), seizure_times))
+
+interaction.plot(x.factor = seizure_times$redcap_repeat_instance, #x-axis variable
+                 trace.factor = seizure_times$study_arm, #variable for lines
+                 response = seizure_times$seiz_freq, #y-axis variable
+                 fun = mean, #metric to plot
+                 ylab = "frequency of seizures (times per month)",
+                 xlab = "instance",
+                 col = c("pink", "blue"),
+                 lty = 1, #line type
+                 lwd = 2, #line width
+                 trace.label = "Study Arm")
+
+seizure_times %>% 
+  ggplot(aes(x = seiz_freq)) + 
+  geom_histogram(binwidth = 1) +
+  facet_grid(study_arm ~ .) + 
+  theme_minimal()
+
+# to get the decrease of DALY, we need to get the beginning DALY and final DALY for 2 arms
+seizure_times %>% mutate(severity = ifelse(seiz_freq >= 1, "severe epilepsy", "seizure-free, treated epilepsy")) %>%
+  group_by(study_arm, visit = redcap_repeat_instance) %>% count(severity) %>% mutate(pct = percent(n / sum(n))) %>% filter(severity == "severe epilepsy") %>% ungroup() %>%select(visit,n, pct) %>%
+  kable(caption="percent of severe epilepsy in 2 arms among 10 visits") %>% 
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover")) %>%
+  pack_rows("EUC",1,10) %>%
+  pack_rows("TSC",11,20)
+
+cat("set limits for outliners: [Q1-1.5*IQR, Q3+1.5*IQR]")
+
+# delete outliners
+quartiles <- quantile(seizure_times$seiz_freq, probs=c(.25, .75), na.rm = FALSE)
+IQR <- IQR(seizure_times$seiz_freq)
+Lower <- quartiles[1] - 1.5*IQR
+Upper <- quartiles[2] + 1.5*IQR 
+seizure_times %>% filter(seiz_freq > Lower & seiz_freq < Upper) %>% mutate(severity = ifelse(seiz_freq >= 1, "severe epilepsy", "seizure-free, treated epilepsy")) %>%
+  group_by(study_arm, visit = redcap_repeat_instance) %>% count(severity) %>% mutate(pct = percent(n / sum(n))) %>% ungroup() %>%select(-study_arm) %>% 
+  kable(caption="percent of epilepsy classes in 2 arms among 10 visits without outliners") %>% 
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover")) %>%
+  pack_rows("EUC",1,20) %>%
+  pack_rows("TSC",21,40)
+```
+
+## Calculation of DALY
+
+DALY = YLL + YLD, while the kind and severity of disease will impact the disability weight for YLD. For severe epilepsy: 0.552 For seizure-free, treated epilepsy: 0.049
+
+For the population, the DALYs will be calculated by disease, country, gender, average age of onset, average age of death, incident cases and incident deaths. -- as the country and gender will determine the life expectancy at age of premature death.
+
+Just for our dataset, it is impossible to gain the individual age of death. So we need to look for the average age of death for childhood epilepsy in Nigeria. -- As few literature in this region, it is hard to get.
+
+The first way is to use DALY from literature: 4.1 DALYs per 1000 individuals annually (Wagner, etc, 2015)[<https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0145300>]
+
+as the number use an average disability weight, it is able to infer the DALY for severe and seizure free conditions.
+
+As our 2 arms have different percents of serverity, we can calculate the DALYs for each group.
+
+The second way serves for the cost-effectiveness. Incremental effectiveness = DALY_TSC - DALY_EUC = YLL_TSC + YLD_TSC - YLL_EUC - YLD_EUC
+
+As the two arms we have almost the same onset age, and we will also use the same age of premature death for 2 arms, YLL_TSC = YLL_EUC
+
+Incremental effectiveness = YLD_TSC - YLD_EUC = (Disability_weight_TSC - Disability_weight_EUC) \* living_years
+
+If compare them annually per 1000 individuals, incremental effectiveness using DALY weight for each year for the same population size = (4% \* 0.552 + 96% *0.049) - (9%* 0.552 + 91% \* 0.049)
+
+# strengths and limitations
+
+## Strengths
+
+1.  There's few early literature working on the childhood epilepsy in Nigeria
+2.  It's a long-period treatment with 10 follow-up visits, which is a good chance to observe the development process
+
+## Weakness
+
+1.  The records is not so complete: not all people complete the scale(especially the QOLIE) on the time and meeting the eligibility
+2.  Lots of assumptions has been made to clean the data
 
 # Questions for Aim 3 Meeting
 
@@ -352,9 +620,3 @@ Cost-effectiveness will be expressed as US dollars per disability adjusted life 
 ## Progress of our work
 
 Half-way to find the effectiveness of TSC.
-
-## Questions
-
-1.  We have collected both VAS scores over the 10 follow up visits and Qolie scores from the Screening and follow up visits. Which one should we use for the calculation of effectiveness: just VAS, just Qolie, or mix them?
-2.  Is the age restriction necessary for data admission?
-3.  What is the timeline for Aim 3 research?
