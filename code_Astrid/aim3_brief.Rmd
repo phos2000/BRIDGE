@@ -81,6 +81,38 @@ For every participant,
 
 5.  For the `r nrow(order2 %>% filter(is.na(dateqolie)))` records with "NA" dates, the order will depend on the *instance*. I prefer to put them on the 2nd, as they might be dropped when building models as the data includes too much noises.
 
+#### Complete Rate of the instruments
+
+```{r miss-item}
+allq %>% 
+  mutate(base = ifelse(type == 'QOLIE-AD-48', 47, 31), miss_item_p = (base - miss_item) / base, miss_item_pct = ifelse(miss_item_p == 1, '100%', ifelse(miss_item_p < 1 & miss_item_p >= 0.9, '90% - 99%', ifelse(miss_item_p < 0.9 & miss_item_p >= 0.8, '80% - 89%', 'below 80%')))) %>%
+  count(study_arm, miss_item_pct) %>%
+  group_by(study_arm) %>%
+  mutate(pct = percent(n / sum(n))) %>%
+  arrange(study_arm, desc(n)) %>%
+  ungroup() %>%
+  select(-study_arm) %>%
+  rename(complete_rate = miss_item_pct) %>%
+  kable(caption = "Complete Rates of QOLIE") %>%
+  kable_styling(full_width = F) %>%
+  pack_rows("EUC",1,4) %>%
+  pack_rows("TSC",5,8) %>%
+  scroll_box()
+
+ggplot(data=allq, aes(x=miss_item)) + 
+  geom_histogram(binwidth = 1) +
+  stat_bin(binwidth=1, geom="text", aes(label=..count..), vjust = -0.25) +
+  facet_grid(type~study_arm) +
+  theme_minimal() +
+  xlab("Number of missing item") + ylab("Freq") + ylim(c(0, 800)) + 
+  ggtitle("Missing items among the questions in QOLIE")
+
+allq = allq %>% mutate(base = ifelse(type == 'QOLIE-AD-48', 47, 31), miss_item_p = (base - miss_item) / base) %>%
+  filter(miss_item_p >= 0.8) %>% select(-base, -miss_item_p)
+```
+
+Then based on the completion rate, we'll delete the cases with completion rate lower than 80%.
+
 ### Missing Rate for QOLIE
 
 #### Had QOLIE records / Should have QOLIE records
@@ -141,35 +173,6 @@ allq %>%
   xlab("QOLIE") + ylab("Freq") +
   ggtitle("Histogram of QOLIE dates")
 
-```
-
-#### Complete Rate of the instruments
-
-Right now we don't delete the records due to the complete rate of the instruments -- something we might do later.
-
-```{r miss-item}
-allq %>% 
-  mutate(base = ifelse(type == 'QOLIE-AD-48', 47, 31), miss_item_p = (base - miss_item) / base, miss_item_pct = ifelse(miss_item_p == 1, '100%', ifelse(miss_item_p < 1 & miss_item_p >= 0.9, '90% - 99%', ifelse(miss_item_p < 0.9 & miss_item_p >= 0.8, '80% - 89%', 'below 80%')))) %>%
-  count(study_arm, miss_item_pct) %>%
-  group_by(study_arm) %>%
-  mutate(pct = percent(n / sum(n))) %>%
-  arrange(study_arm, desc(n)) %>%
-  ungroup() %>%
-  select(-study_arm) %>%
-  rename(complete_rate = miss_item_pct) %>%
-  kable(caption = "Complete Rates of QOLIE") %>%
-  kable_styling(full_width = F) %>%
-  pack_rows("EUC",1,4) %>%
-  pack_rows("TSC",5,8) %>%
-  scroll_box()
-
-ggplot(data=allq, aes(x=miss_item)) + 
-  geom_histogram(binwidth = 1) +
-  stat_bin(binwidth=1, geom="text", aes(label=..count..), vjust = -0.25) +
-  facet_grid(type~study_arm) +
-  theme_minimal() +
-  xlab("Number of missing item") + ylab("Freq") + ylim(c(0, 800)) + 
-  ggtitle("Missing items among the questions in QOLIE")
 ```
 
 ### Demographic of QOLIE users
@@ -287,7 +290,7 @@ The lm formula creates several dummy variables:
 
 *order1* and *order3*, for 0th having both 2 are 0, 1th for only order1 = 1 and 3th for only order3 = 1.
 
-$$QOLIE = 47.8371 + 0.5864 * TSC + 2.3215 * order1 + 4.5656 * order3 \\ - 1.0626 * TSC*order1 + 2.0864 * TSC*order3$$
+$$QOLIE = `r summary(lm(score ~ factor(study_arm)*factor(order), qinfo))$coefficients[1,1]` + `r summary(lm(score ~ factor(study_arm)*factor(order), qinfo))$coefficients[2,1]` * TSC + `r summary(lm(score ~ factor(study_arm)*factor(order), qinfo))$coefficients[3,1]` * order_1 + `r summary(lm(score ~ factor(study_arm)*factor(order), qinfo))$coefficients[4,1]` * order_3 \\ + `r summary(lm(score ~ factor(study_arm)*factor(order), qinfo))$coefficients[5,1]` * TSC * order_1 + `r summary(lm(score ~ factor(study_arm)*factor(order), qinfo))$coefficients[6,1]` * TSC * order_3 $$
 
 ```{r lm-age}
 summary(lm(score ~ factor(study_arm)*factor(order) + age, qinfo))
@@ -301,7 +304,7 @@ ggplot(qinfo,aes(x = age, y = score, color = order)) +
 
 the lm formula is (only age is not a dummy variable):
 
-$$QOLIE = 34.7492 + 0.5832 * TSC + 2.1348 * order1 + 2.8863 * order3 \\ - 1.0423*TSC*order1 + 2.0852 * TSC*order3 + 0.9166 * age$$
+$$QOLIE = `r summary(lm(score ~ factor(study_arm)*factor(order) + age, qinfo))$coefficients[1,1]` + `r summary(lm(score ~ factor(study_arm)*factor(order) + age, qinfo))$coefficients[2,1]` * TSC + `r summary(lm(score ~ factor(study_arm)*factor(order) + age, qinfo))$coefficients[3,1]` * order_1 + `r summary(lm(score ~ factor(study_arm)*factor(order) + age, qinfo))$coefficients[4,1]` * order_3 \\ + `r summary(lm(score ~ factor(study_arm)*factor(order) + age, qinfo))$coefficients[6,1]` * TSC * order_1 + `r summary(lm(score ~ factor(study_arm)*factor(order) + age, qinfo))$coefficients[7,1]` * TSC*order_3 + `r summary(lm(score ~ factor(study_arm)*factor(order) + age, qinfo))$coefficients[5,1]` * age$$
 
 ```{r lm-gender}
 summary(lm(score ~ factor(study_arm)*factor(order) + factor(gender), qinfo))
@@ -315,7 +318,7 @@ summary(lm(score ~ factor(study_arm)*factor(order) + age + factor(city), qinfo))
 
 **City plays a role that Zario \< Keduna \< Kano.**
 
-$$QOLIE = 37.1040 - 0.2749 * TSC + 2.0220 * order1 + 2.5715 * order3 - 0.9587*TSC*order1 + 2.4058 * TSC*order3 \\ + 0.8201 * age + 2.0518 * Kano - 3.7943 * Zaria$$
+$$QOLIE = `r summary(lm(score ~ factor(study_arm)*factor(order) + age + factor(city), qinfo))$coefficients[1,1]` + `r summary(lm(score ~ factor(study_arm)*factor(order) + age + factor(city), qinfo))$coefficients[2,1]` * TSC + `r summary(lm(score ~ factor(study_arm)*factor(order) + age + factor(city), qinfo))$coefficients[3,1]` * order_1 + `r summary(lm(score ~ factor(study_arm)*factor(order) + age + factor(city), qinfo))$coefficients[4,1]` * order_3 + `r summary(lm(score ~ factor(study_arm)*factor(order) + age + factor(city), qinfo))$coefficients[8,1]` * TSC * order_1 + `r summary(lm(score ~ factor(study_arm)*factor(order) + age + factor(city), qinfo))$coefficients[9,1]` * TSC * order_3 \\ + `r summary(lm(score ~ factor(study_arm)*factor(order) + age + factor(city), qinfo))$coefficients[5,1]` * age + `r summary(lm(score ~ factor(study_arm)*factor(order) + age + factor(city), qinfo))$coefficients[6,1]` * Kano + `r summary(lm(score ~ factor(study_arm)*factor(order) + age + factor(city), qinfo))$coefficients[7,1]` * Zaria$$
 
 ## VAS
 
@@ -370,12 +373,6 @@ The interaction shows the expected difference in the effect of the N-th visit(co
 
 The intercept, is the average VAS of screening visit in EUC arm.
 
-The linear model formula is:
-
-$$VAS = 48.564 + 3.804*TSC + 5.520*Visit_1 + 8.489*Visit_2 + 12.467 * Visit_3 + 15.260*Visit_4 + 19.413 * Visit_5 \\
- + 22.331*Visit_6 + 25.714 * Visit_7 + 29.671 * Visit_8 + 29.965 * Visit_9 + 31.491 * Visit_{10} \\
- + 1.397 * TSC * Visit_1 + 4.916 * TSC * Visit_2 + 4.204 * TSC * Visit_3 + 5.863 * TSC * Visit_4 + 4.580 * TSC * Visit_5 \\
- + 5.527 * TSC * Visit_6 + 5.383 * TSC * Visit_7 + 5.709 * TSC * Visit_8 + 5.960 * TSC * Visit_9 + 6.530 * TSC * Visit_{10} $$
 
 ```{r lm}
 fcf_i = fcf_c %>% filter(!is.na(qolie)) %>% select(record_id, study_arm, visit = redcap_repeat_instance, qolie, age = agefu, gender, city) %>% mutate(gender = ifelse(gender == 1, "Female", "Male"), visit = as.numeric(visit)) %>% bind_rows(bs %>% filter(qolie_48_1117_v0_complete == "2") %>% select(record_id = unique_id, study_arm, qolie = vas_qolie_48, age, gender, city) %>% mutate(visit = 0))
@@ -395,9 +392,17 @@ interaction.plot(x.factor = fcf_i$visit, #x-axis variable
                  trace.label = "Study Arm")
 ```
 
+The linear model formula is:
+
+$$VAS = `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[1,1]` + `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[2,1]` *TSC + `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[3,1]` *Visit_1 + `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[4,1]` *Visit_2 + `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[5,1]` * Visit_3 + `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[6,1]` *Visit_4 + `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[7,1]` * Visit_5 \\
+ + `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[8,1]` *Visit_6 + `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[9,1]` * Visit_7 + `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[10,1]` * Visit_8 + `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[11,1]` * Visit_9 + `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[12,1]` * Visit_{10} \\
+ + `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[13,1]`  * TSC * Visit_1 + `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[14,1]` * TSC * Visit_2 + `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[15,1]` * TSC * Visit_3 + `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[16,1]` * TSC * Visit_4 + `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[17,1]` * TSC * Visit_5 \\
+ + `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[18,1]` * TSC * Visit_6 + `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[19,1]` * TSC * Visit_7 + `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[20,1]` * TSC * Visit_8 + `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[21,1]` * TSC * Visit_9 + `r summary(lm(qolie ~ factor(study_arm)*factor(visit), fcf_i))$coefficients[22,1]` * TSC * Visit_{10} $$
+
+
 **the number of \* shows the level of significance. Here, from the interaction parts, we can find the score of TSC is significantly higher than EUC for every visit.**
 
-**For the screening visit, the score of TSC is 3.804 higher than the EUC(p = 0.02 shows significant group difference in the popularity). The difference expands over the visits(3.804 + 2.287 for Visit 1 until 3.804 + 6.560 for Visit 10).**
+**For the screening visit, the score of TSC is 3.804 higher than the EUC(p = 0.02 shows significant group difference in the popularity). The difference expands over the visits**
 
 #### Age as covariant
 
@@ -441,7 +446,7 @@ cat("As for the cities, Keduna > Kano > Zaria")
 
 As city is one of the variable of our interest, we include it into the linear model and find that participants in different cities will have significantly different average VAS.
 
-# Comparison between VAS and QOLIE
+# Comparison between VAS and QOLIE(including QOLIE-31 and QOLIE-AD-48)
 
 the only question is that in the Screening questionnaire, the VAS is contained in the QOLIE survey -- so only people having the 0th QOLIE will be able to have the baseline VAS.
 
@@ -450,13 +455,15 @@ We can still try to use the first follow-up visit VAS(which is in the follow up 
 ```{r VAS-QOLIE}
 qv = allq %>% filter(order == 0) %>% select(record_id) %>% inner_join(allq %>% filter(order == 3), by = "record_id") %>% select(record_id) %>% left_join(allq) %>% filter(order != 2) %>% count(record_id) %>% filter(n < 3) %>% select(-n) %>% left_join(fcf_c %>% filter(redcap_repeat_instance == 3) %>% mutate(order = 1) %>% transmute(record_id, study_arm, dateqolie = as.IDate(datefu), qolie, order, age = agefu), by = "record_id")  %>% filter(!is.na(qolie)) %>% bind_rows(allq %>% filter(order == 0) %>% select(record_id) %>% inner_join(allq %>% filter(order == 3), by = "record_id") %>% select(record_id) %>% left_join(allq) %>% filter(order != 2) %>% rename(qolie = score))
 
+# qv %>% group_by(study_arm, order) %>% summarize(n = n(), mean = mean(qolie))
+
 summary(lm(qolie ~ factor(study_arm)*factor(order), qv))
 
 interaction.plot(x.factor = qv$order, #x-axis variable
                  trace.factor = qv$study_arm, #variable for lines
                  response = qv$qolie, #y-axis variable
                  fun = mean, #metric to plot
-                 ylab = "QOLIE Score (marginal mean)",
+                 ylab = "QOLIE Score (marginal mean) -- adding 1st VAS",
                  xlab = "Order of QOLIE",
                  col = c("pink", "blue"),
                  lty = 1, #line type
@@ -479,7 +486,7 @@ interaction.plot(x.factor = qv1$order, #x-axis variable
                  trace.factor = qv1$study_arm, #variable for lines
                  response = qv1$qolie, #y-axis variable
                  fun = mean, #metric to plot
-                 ylab = "QOLIE Score (marginal mean)",
+                 ylab = "QOLIE Score (marginal mean) -- adding 0th and 1st VAS",
                  xlab = "Order of QOLIE",
                  col = c("pink", "blue"),
                  lty = 1, #line type
@@ -488,7 +495,14 @@ interaction.plot(x.factor = qv1$order, #x-axis variable
 
 summary(lm(qolie ~ factor(study_arm)*factor(order), qv1))
 
+# qv1 %>% group_by(study_arm, order) %>% summarize(n = n(), mean = mean(qolie))
+
 ```
+To compare the two figures, the first figure include `r min(qv %>% filter(study_arm == "EUC") %>% group_by(order) %>% summarize(n = n()) %>% select(n))` EUC participants and `r min(qv %>% filter(study_arm == "TSC") %>% group_by(order) %>% summarize(n = n()) %>% select(n))` TSC participants, while the second figure include `r min(qv1 %>% filter(study_arm == "EUC") %>% group_by(order) %>% summarize(n = n()) %>% select(n))` EUC participants and `r min(qv1 %>% filter(study_arm == "TSC") %>% group_by(order) %>% summarize(n = n()) %>% select(n))` TSC participants.
+
+The second figure has higher scores among all orders in TSC arm than the first figure. The introduction of more participants using VAS in replace of Qolie might lead to a tendency that the TSC arm has a higher average value than EUC arm. 
+
+**Although the relative position of TSC over EUC changes between the two figures, the interactions are still not statistically significant. The VAS score is the only way to show the impacts of two arms over follow-up visits(based on the interactions).**
 
 # DALY
 
