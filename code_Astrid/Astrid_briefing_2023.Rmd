@@ -1198,6 +1198,10 @@ fcf_i %>%
 
 The two measures had similar tendency but the two arms of VAS had significance difference between them while QOLIE didn't. As QOLIE-AD-48 and QOLIE-31 are longer questionnaires compared to one-question VAS, they might be more difficult for the patients to fill in, which led to a narrower result.
 
+# Cost
+
+see the excel sheet. Right now use the avg unit cost for each yr. May need to consider the inflation and discounting.
+
 # DALY
 
 ## age of onset of disease
@@ -1265,7 +1269,7 @@ seizure_times %>%
   theme_minimal()
 
 # to get the decrease of DALY, we need to get the beginning DALY and final DALY for 2 arms
-pct_severe = seizure_times %>% mutate(severity = ifelse(seiz_freq >= 1, "severe epilepsy", "seizure-free, treated epilepsy")) %>%
+pct_severe = seizure_times %>% mutate(severity = ifelse(seiz_freq >= 1, "severe epilepsy", "others")) %>%
   group_by(study_arm, visit) %>% count(severity) %>% mutate(pct = percent(n / sum(n))) %>% filter(severity == "severe epilepsy") %>% ungroup() %>% select(visit,n, pct) 
 
 pct_severe %>%
@@ -1293,6 +1297,65 @@ As the intervals between screening and follow up visit 1 is not as scheduled sta
 
 ## Calculation of DALY
 
+severe epilepsy, defined as an average seizure frequency of more than or equal to once per month;\
+less severe epilepsy with a seizure frequency of less than once a month, or no seizures in the past year while untreated but still fulfilling the criteria of active epilepsy;\
+and seizure-free, treated epilepsy, defined as not having seizures in the past year while on treatment.
+
+if seiz_freq = 0 from visit 1 - 7 or 2/3 - 9 or 5 - 9 or 7 - 10, later can be regarded as seizure-free as far as no seizure happened.
+
+Disability Weight (Essential for the YLDs) --
+
+-   Severe epilepsy: 0.552
+
+-   Less epilepsy: 0.263
+
+-   seizure-free, treated epilepsy: 0.049
+
+So we can get the difference between 2 arms.
+
+For the YLLs part, we can use YLLs or mortality from GBD. However, as GBD only have the epilepsy category (not detailed), the 2 arms should be the same -- if we don't consider some of them recovered at the end.
+
+```{r category_YLD}
+# pct_seizure_free = seizure_times %>% filter(seiz_freq == 0) %>% count(record_id, visit, study_arm) %>% spread(visit, n, fill = 0, sep = "") %>%
+#   mutate(
+#     zero_0_12 = ifelse(visit1 == 1 & visit2 == 1 & visit3 == 1 & visit4 == 1 & visit5 == 1 & visit6 == 1 & visit7 == 1, TRUE, FALSE),
+#     zero_3_15 = ifelse(visit3 == 1 & visit4 == 1 & visit5 == 1 & visit6 == 1 & visit7 == 1 & visit8 == 1, TRUE, FALSE),
+#     zero_6_18 = ifelse(visit5 == 1 & visit6 == 1 & visit7 == 1 & visit8 == 1 & visit9 == 1, TRUE, FALSE)) %>%
+#   mutate(free_12_15 = ifelse(zero_0_12 & visit8 == 1, TRUE, FALSE),
+#          free_15_18 = ifelse(zero_3_15 & visit9 == 1, TRUE, FALSE),
+#          free_18_24 = ifelse(zero_6_18 & visit10 == 1, TRUE, FALSE))
+
+# count how many NAs in each col
+# sapply(severity, function(x) sum(is.na(x)))
+
+severity = seizure_times %>% select(record_id, visit, study_arm, seiz_freq) %>% spread(visit, seiz_freq, sep = "") %>% drop_na() %>%
+  mutate(
+    zero_0_12 = ifelse(visit1 == 0 & visit2 == 0 & visit3 == 0 & visit4 == 0 & visit5 == 0 & visit6 == 0 & visit7 == 0, TRUE, FALSE),
+    zero_3_15 = ifelse(visit3 == 0 & visit4 == 0 & visit5 == 0 & visit6 == 0 & visit7 == 0 & visit8 == 0, TRUE, FALSE),
+    zero_6_18 = ifelse(visit5 == 0 & visit6 == 0 & visit7 == 0 & visit8 == 0 & visit9 == 0, TRUE, FALSE)) %>%
+  mutate(across(starts_with("visit"), ~ ifelse(.x >= 1, "severe epilepsy", "less severe epilepsy"), .names = "severity_{.col}")) %>%
+  mutate(severity_visit8 = ifelse(zero_0_12 & visit8 == 0, "seizure-free, treated", severity_visit8),
+         severity_visit9 = ifelse(zero_3_15 & visit9 == 0, "seizure-free, treated", severity_visit9),
+         severity_visit10 = ifelse(zero_6_18 & visit10 == 0, "seizure-free, treated", severity_visit9))
+
+severity_DALY = severity %>% 
+  mutate(across(starts_with("severity_visit"), ~ ifelse(.x == "severe epilepsy", 0.552, ifelse(.x == "less severe epilepsy", 0.263, 0.049)), .names = "DALYw_{.col}")) %>% select(-DALYw_severity_visit1) %>%
+  mutate(DALY_2yr = DALYw_severity_visit2 * 1/12 + DALYw_severity_visit3 * 1/12 + DALYw_severity_visit4 * 2/12 + DALYw_severity_visit5 * 2/12 + DALYw_severity_visit6 * 3/12 + DALYw_severity_visit7 * 3/12 + DALYw_severity_visit8 * 3/12 +  DALYw_severity_visit9 * 3/12 + DALYw_severity_visit10 * 6/12)
+
+severity_DALY %>%
+  group_by(study_arm) %>%
+  summarize(mean(DALY_2yr) / 2)
+
+```
+
+incremental cost for TSC - EUC per patient = 3203.91(2-yr) / 2829.74(3-yr)
+
+incremental -DALY **yearly** for TSC - EUC per patient = -0.29992 - (-0.32292) = 0.023
+
+**ICER = 3203.91/(0.023\*2) = 69650**
+
+### Previous
+
 DALY = YLL + YLD, while the kind and severity of disease will impact the disability weight for YLD.
 
 The YLD can be computed based on factor of I × DW × L with uniform age weights and zero discounting, where, I represents the number of incident cases of childhood epilepsy in a reference period, DW is the disability weight (0--1), and L is the mean duration of disability (years) ([Murray and Lopez, 1996](https://www.sciencedirect.com/science/article/pii/S0920121116300699#bib0060)).
@@ -1317,7 +1380,7 @@ As the two arms we have almost the same onset age, and we will also use the same
 
 Incremental effectiveness = YLD_TSC - YLD_EUC \~ (Disability_weight_TSC - Disability_weight_EUC) \* living_years
 
-If compare them **annually per 1000 individuals,** incremental effectiveness using DALY weight for each year for the same population size = **(0.03 \* 0.552 + 0.97 \* 0.049) - (0.10 \* 0.552 + 0.90 \* 0.049) = `r (0.03 * 0.552 + 0.97 * 0.049) - (0.1 * 0.552 + 0.90 * 0.049)`**
+**Delete**:If compare them **annually per 1000 individuals,** incremental effectiveness using DALY weight for each year for the same population size = **(0.03 \* 0.552 + 0.97 \* 0.049) - (0.10 \* 0.552 + 0.90 \* 0.049) = `r (0.03 * 0.552 + 0.97 * 0.049) - (0.1 * 0.552 + 0.90 * 0.049)`**
 
 Although we can't get an exact DALY for each arm, the cost-effectiveness analysis is more precise.
 

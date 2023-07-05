@@ -1,7 +1,9 @@
 ---
 title: "Redcap DataBase"
 author: "lizet"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
 ---
 
 Load 4 data sets (one screening, 3 follow ups at 3 cities) from the server using API tokens
