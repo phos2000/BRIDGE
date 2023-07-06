@@ -1,0 +1,123 @@
+---
+title: "Check Costs in BRIDGE"
+author: "Astrid Yu, Ashley Leech"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    code_folding: "hide"
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+library(tidyverse)
+library(knitr)
+library(scales)
+library(kableExtra)
+library(stats)
+```
+
+```{r data}
+fu <- data.table::fread("../data/FollowDat.csv")
+bs <- data.table::fread("../data/BaseDat.csv")
+```
+
+# Medical costs
+
+-   Medical Personnel
+
+    -   CHW visits - Gov
+    -   Physician visit - Private(??)
+    -   Physician visit - Gov(??)
+
+-   Clinical supervision of CHWs
+
+    -   Time (hours) supervising CHWs (clinical supervision)(??)
+
+-   Hospital/testing
+
+    -   Private hospital admissions
+    -   Gov hospital admissions
+    -   MRI scans
+    -   EEGs
+    -   CT scans
+
+-   Medications/AEDs \#
+
+    -   Phenobarbitone
+    -   Carbamazepine
+    -   Valproate
+    -   Phenytoin
+    -   Levetracetam
+    -   Gabapentin
+    -   Lamotrigine
+
+```{r visits}
+# of patients
+fu %>% filter(redcap_repeat_instrument == "follow_up_care_form") %>%
+  count(study_arm, redcap_repeat_instance)
+
+fu %>% filter(redcap_repeat_instrument == "follow_up_care_form") %>%
+  mutate(ymfu = format(datefu, "%Y-%m")) %>%
+  count(study_arm, ymfu, redcap_repeat_instance) %>%
+  ggplot(aes(x = ymfu, y = n, fill = as.factor(redcap_repeat_instance))) +
+  geom_col(position = "stack") +
+  facet_grid(study_arm ~ .)
+
+```
+
+```{r scans}
+# blind
+fu %>% filter(redcap_repeat_instrument == "blinded_1_month") %>% 
+  filter(dxtestsbm1 == 1) %>% select(record_id, study_arm, bloodbm1, imagingbm1, eegbm1, hospitalizationsbm1)
+
+```
+
+```{r drug}
+# study_arm = TSC, what_drug_v2 = "aed"
+# aed = 1(Carbamazepine), dose_step_car, step_1_carb_v2 = "step1carb", step_2_carb_v2 = "step2carb", step_3_carb_v2 = "step3carb"
+# aed = 2(Valproate), dose_step_val, step_1_valp_v2 = "step1valp", step_2_valp_v2 = "step2valp", step_3_valp_v2 = "step3valp"
+# aed = 3(Phenobarbitone), dose_step_phe, step_1_phen_v2 = "step1phen",step_2_phen_v2 = "step2phen",step_3_phen_v2 = "step3phen"
+
+fu %>% filter(redcap_repeat_instrument == "follow_up_care_form" & study_arm == "TSC") %>%
+  group_by(redcap_repeat_instance) %>%
+  count(step1carb)
+  count(step2carb)
+  count(step3carb)
+  count(step1valp)
+  count(step2valp)
+  count(step3valp)
+  count(step1phen)
+  count(step2phen)
+  count(step3phen)
+
+# combined_aed_euc_v2 = "combinedaed",
+# dosing_am_euc_v2 = "doseam",
+# dosing_afternoon_euc_v2 = "dosenoon",
+# dosing_evening_euc_v2 = "dosepm",
+# anti_epileptic_drug_2_euc_v2 = "aed2",
+# dosing_am_euc_2_v2 = "doseam2",
+# dosing_noon_euc_2_v2 = "dosenoon2",
+# dosing_pm_euc_2_v2 = "dosepm2",
+# anti_epileptic_drug_3_euc_v2 = "aed3",
+# dosing_am_euc_3_v2 = "doseam3",
+# dosing_noon_euc_3_v2 = "dosenoon3",
+# dosing_pm_euc_3_v2 = "dosepm3",
+
+fu %>% filter(redcap_repeat_instrument == "follow_up_care_form" & study_arm == "EUC") %>%
+  group_by(redcap_repeat_instance) %>%
+  group_by(combinedaed) %>%
+  group_by(anti_epileptic_drug_euc_v2)
+  group_by(anti_epileptic_drug_2_euc_v2)
+  group_by(anti_epileptic_drug_3_euc_v2) %>%
+  count(doseam)
+  count(dosenoon)
+  count(dosepm)
+  count(doseam2)
+  count(dosenoon2)
+  count(dosepm2)
+  count(doseam3)
+  count(dosenoon3)
+  count(dosepm3)
+```
