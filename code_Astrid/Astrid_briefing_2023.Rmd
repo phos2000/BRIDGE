@@ -1350,13 +1350,13 @@ severity_DALY %>%
 
 incremental cost (in Naira) for TSC - EUC per patient = 3203.91(2-yr) / 2829.74(3-yr)
 
-currency exchange rate in 2023: 490.4176 NGN  
+currency exchange rate in 2023: 490.4176 NGN
 
 incremental -DALY **yearly** for TSC - EUC per patient = -0.29992 - (-0.32292) = 0.023
 
 **ICER = 3203.91/(0.023\*2\*490.4176) = 142**
 
-CEA threshold: 0.5 * GDPpc (2000 dollars in Nigeria) = 1000  
+CEA threshold: 0.5 \* GDPpc (2000 dollars in Nigeria) = 1000
 
 ### Previous
 
