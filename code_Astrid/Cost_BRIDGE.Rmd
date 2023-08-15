@@ -1,0 +1,100 @@
+---
+title: "BRIDGE Cost"
+author: "Astrid"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+Source: Local collection
+Currency: Originially Naira, Need to be converted into USD based on the 2023 exchange rate: 540.8564
+
+https://www.exchangerates.org.uk/USD-NGN-spot-exchange-rates-history-2023.html
+
+Because we're estimate the present-day policy, all the unit cost will be based on the 2023 version(which is the MAX in the excel sheet). 
+
+```{r parameterization_unit_cost}
+cVisit_CHW_2023 = 500
+cVisit_Physician_Private_2023 = 5000
+cVisit_Physician_Gov_2023 = 2000
+cSupervision_CHW_2023 = 1000
+
+cAdmission_Hosp_Private_2023 = 10000
+cAdmission_Hosp_Gov_2023 = 3000
+cMRI_scan_2023 = 70000
+cEEG_2023 = 20
+cCT_scan_2023 = 40000
+
+cPhenobarbitone_2023 = 24
+cCarbamazepine_2023 = 16
+cValproate_2023 = 62
+cPhenytoin_2023 = 68
+cLevetracetam_2023 = 83
+cGabapentin_2023 = 70
+# cLamotrigine
+
+cCatering_2023 = 3000
+cTraining_Facilitator_2023 = 1000
+cTraining_CHW_2023 = 500
+cTraining_Admin_2023 = 1000
+cTravel_Facilitator_2023 = 40
+cTravel_CHW_2023 = 40
+
+exchange_Naira_to_USD = 1/540.8564
+```
+
+It is hard to track any individual's changes, I feel the CEA per individual is hard to estimate.
+I'm able to get the total DALY for all patients in this project(after 2 years, they have an improvement -- maybe not exactly 2 year but we can calculate from the beginning to the end), and I'm able to get all consumed units in this project. 
+
+There maybe some dropout in the research, it is like the waste and will be kept in the cost calculation. 
+
+```{r treatment length}
+fudw
+```
+
+```{r unit_count}
+# Year 1: between 7/1/2020 - 6/30/2021
+nVisit_CHW_Year1 = 4505
+nVisit_Physician_Private_2023 = 5000
+cVisit_Physician_Gov_2023 = 2000
+cSupervision_CHW_2023 = 1000
+
+cAdmission_Hosp_Private_2023 = 10000
+cAdmission_Hosp_Gov_2023 = 3000
+cMRI_scan_2023 = 70000
+cEEG_2023 = 20
+cCT_scan_2023 = 40000
+
+cPhenobarbitone_2023 = 24
+cCarbamazepine_2023 = 16
+cValproate_2023 = 62
+cPhenytoin_2023 = 68
+cLevetracetam_2023 = 83
+cGabapentin_2023 = 70
+# cLamotrigine
+
+cCatering_2023 = 3000
+cTraining_Facilitator_2023 = 1000
+cTraining_CHW_2023 = 500
+cTraining_Admin_2023 = 1000
+cTravel_Facilitator_2023 = 40
+cTravel_CHW_2023 = 40
+
+
+# Year 2: between 7/1/2021 - 6/30/2022
+
+
+
+
+# Year 3: between 7/1/2022 - 6/30/2023
+
+
+
+
+
+
+```
+
+Use two arms' sum costs's difference to calculate!!
