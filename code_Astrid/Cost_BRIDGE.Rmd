@@ -8,6 +8,10 @@ output:
     toc_float: TRUE
 ---
 
+```{r setup}
+library(tidyverse)
+```
+
 Source: Local collection
 Currency: Originially Naira, Need to be converted into USD based on the 2023 exchange rate: 540.8564
 
@@ -51,50 +55,141 @@ I'm able to get the total DALY for all patients in this project(after 2 years, t
 There maybe some dropout in the research, it is like the waste and will be kept in the cost calculation. 
 
 ```{r treatment length}
-fudw
+#fudw
 ```
 
 ```{r unit_count}
 # Year 1: between 7/1/2020 - 6/30/2021
-nVisit_CHW_Year1 = 4505
-nVisit_Physician_Private_2023 = 5000
-cVisit_Physician_Gov_2023 = 2000
-cSupervision_CHW_2023 = 1000
-
-cAdmission_Hosp_Private_2023 = 10000
-cAdmission_Hosp_Gov_2023 = 3000
-cMRI_scan_2023 = 70000
-cEEG_2023 = 20
-cCT_scan_2023 = 40000
-
-cPhenobarbitone_2023 = 24
-cCarbamazepine_2023 = 16
-cValproate_2023 = 62
-cPhenytoin_2023 = 68
-cLevetracetam_2023 = 83
-cGabapentin_2023 = 70
-# cLamotrigine
-
-cCatering_2023 = 3000
-cTraining_Facilitator_2023 = 1000
-cTraining_CHW_2023 = 500
-cTraining_Admin_2023 = 1000
-cTravel_Facilitator_2023 = 40
-cTravel_CHW_2023 = 40
-
-
 # Year 2: between 7/1/2021 - 6/30/2022
-
-
-
-
 # Year 3: between 7/1/2022 - 6/30/2023
 
+## TSC ##
 
+nVisit_CHW_TSC = 4505 + 2948 + 688
+nVisit_Physician_Private_TSC = 5 + 2 + 2
+nVisit_Physician_Gov_TSC = 493 + 428 + 246
+nSupervision_CHW_TSC = 2.5
 
+nAdmission_Hosp_Private_TSC = 3
+nAdmission_Hosp_Gov_TSC = 3 + 19 + 1
+nMRI_scan_TSC = 6
+nEEG_TSC = 7
+nCT_scan_TSC = 6
 
+nPhenobarbitone_TSC = 2753 + 1800 + 379
+nCarbamazepine_TSC = 1393 + 1064 + 264
+nValproate_TSC = 324 + 196 + 49
+nPhenytoin_TSC = 0
+nLevetracetam_TSC = 4
+nGabapentin_TSC = 1
+nLamotrigine = 0
 
+nCatering_TSC = 600 + 50
+nTraining_Facilitator_TSC = 900 + 180
+nTraining_CHW_TSC = 5400
+nTraining_Admin_TSC = 0
+nTravel_Facilitator_TSC = 0
+nTravel_CHW_TSC = 484
+
+## EUC ##
+
+nVisit_CHW_EUC = 4660 + 2794 + 635
+nVisit_Physician_Private_EUC = 21 + 14 + 8
+nVisit_Physician_Gov_EUC = 991 + 833 + 485
+nSupervision_CHW_EUC = 0
+
+nAdmission_Hosp_Private_EUC = 1 + 2
+nAdmission_Hosp_Gov_EUC = 4 + 13 + 3
+nMRI_scan_EUC = 7
+nEEG_EUC = 15 + 7 + 1
+nCT_scan_EUC = 7
+
+nPhenobarbitone_EUC = 468 + 355 + 99
+nCarbamazepine_EUC = 2411 + 1828 + 432
+nValproate_EUC = 206 + 139 + 47
+nPhenytoin_EUC = 11 + 8 + 1
+nLevetracetam_EUC = 67 + 55 + 23
+nGabapentin_EUC = 54 + 52 + 20
+nLamotrigine = 0
+
+nCatering_EUC = 0
+nTraining_Facilitator_EUC = 0
+nTraining_CHW_EUC = 0
+nTraining_Admin_EUC = 0
+nTravel_Facilitator_EUC = 0
+nTravel_CHW_EUC = 0
 
 ```
 
 Use two arms' sum costs's difference to calculate!!
+
+```{r cost_sum}
+cTSC = cVisit_CHW_2023*exchange_Naira_to_USD*nVisit_CHW_TSC +
+  cVisit_Physician_Private_2023 * exchange_Naira_to_USD * nVisit_Physician_Private_TSC + 
+  cVisit_Physician_Gov_2023 * exchange_Naira_to_USD * nVisit_Physician_Gov_TSC +
+  cSupervision_CHW_2023 * exchange_Naira_to_USD * nSupervision_CHW_TSC +
+  cAdmission_Hosp_Private_2023 * exchange_Naira_to_USD * nAdmission_Hosp_Private_TSC + 
+  cAdmission_Hosp_Gov_2023 * exchange_Naira_to_USD * nAdmission_Hosp_Gov_TSC +
+  cMRI_scan_2023 * exchange_Naira_to_USD * nMRI_scan_TSC +
+  cEEG_2023 * exchange_Naira_to_USD * nEEG_TSC +
+  cCT_scan_2023 * exchange_Naira_to_USD * nCT_scan_TSC +
+  cPhenobarbitone_2023 * exchange_Naira_to_USD * nPhenobarbitone_TSC +
+  cCarbamazepine_2023 * exchange_Naira_to_USD * nCarbamazepine_TSC + 
+  cValproate_2023 * exchange_Naira_to_USD * nValproate_TSC + 
+  cPhenytoin_2023 * exchange_Naira_to_USD * nPhenobarbitone_TSC +
+  cLevetracetam_2023 * exchange_Naira_to_USD * nLevetracetam_TSC +
+  cGabapentin_2023 * exchange_Naira_to_USD * nGabapentin_TSC +
+  cCatering_2023 * exchange_Naira_to_USD * nCatering_TSC + 
+  cTraining_Facilitator_2023 * exchange_Naira_to_USD * nTraining_Facilitator_TSC +
+  cTraining_CHW_2023 * exchange_Naira_to_USD * nTraining_Facilitator_TSC +
+  cTraining_Admin_2023 * exchange_Naira_to_USD * nTraining_Admin_TSC + 
+  cTravel_Facilitator_2023 * exchange_Naira_to_USD * nTravel_Facilitator_TSC +
+  cTravel_CHW_2023 * exchange_Naira_to_USD * nTravel_CHW_TSC
+
+cEUC = cVisit_CHW_2023*exchange_Naira_to_USD*nVisit_CHW_EUC +
+  cVisit_Physician_Private_2023 * exchange_Naira_to_USD * nVisit_Physician_Private_EUC + 
+  cVisit_Physician_Gov_2023 * exchange_Naira_to_USD * nVisit_Physician_Gov_EUC +
+  cSupervision_CHW_2023 * exchange_Naira_to_USD * nSupervision_CHW_EUC +
+  cAdmission_Hosp_Private_2023 * exchange_Naira_to_USD * nAdmission_Hosp_Private_EUC + 
+  cAdmission_Hosp_Gov_2023 * exchange_Naira_to_USD * nAdmission_Hosp_Gov_EUC +
+  cMRI_scan_2023 * exchange_Naira_to_USD * nMRI_scan_EUC +
+  cEEG_2023 * exchange_Naira_to_USD * nEEG_EUC +
+  cCT_scan_2023 * exchange_Naira_to_USD * nCT_scan_EUC +
+  cPhenobarbitone_2023 * exchange_Naira_to_USD * nPhenobarbitone_EUC +
+  cCarbamazepine_2023 * exchange_Naira_to_USD * nCarbamazepine_EUC + 
+  cValproate_2023 * exchange_Naira_to_USD * nValproate_EUC + 
+  cPhenytoin_2023 * exchange_Naira_to_USD * nPhenobarbitone_EUC +
+  cLevetracetam_2023 * exchange_Naira_to_USD * nLevetracetam_EUC +
+  cGabapentin_2023 * exchange_Naira_to_USD * nGabapentin_EUC +
+  cCatering_2023 * exchange_Naira_to_USD * nCatering_EUC + 
+  cTraining_Facilitator_2023 * exchange_Naira_to_USD * nTraining_Facilitator_EUC +
+  cTraining_CHW_2023 * exchange_Naira_to_USD * nTraining_Facilitator_EUC +
+  cTraining_Admin_2023 * exchange_Naira_to_USD * nTraining_Admin_EUC + 
+  cTravel_Facilitator_2023 * exchange_Naira_to_USD * nTravel_Facilitator_EUC +
+  cTravel_CHW_2023 * exchange_Naira_to_USD * nTravel_CHW_EUC
+
+cTSC
+cEUC
+```
+
+Because EUC and TSC have different numbers of patients, we need to divide the summed number by the numbers of patients. 
+
+As there're people dropout, finally people who didn't drop out making sense. So we need to have people at the final 10th visit's DALY and the cost for all people. 
+
+```{r CEA}
+load("CEA_Bridge.RData")
+
+severity_DALY %>% count(study_arm)
+
+incremental_cost_per = cTSC / nrow(severity_DALY[severity_DALY[["study_arm"]] == "TSC",]) - 
+  cEUC / nrow(severity_DALY[severity_DALY[["study_arm"]] == "EUC",])
+
+mean(severity_DALY[severity_DALY[["study_arm"]] == "TSC","DALY_2yr"])
+mean(severity_DALY[severity_DALY[["study_arm"]] == "EUC","DALY_2yr"])
+
+incremental_DALY_per = mean(severity_DALY[severity_DALY[["study_arm"]] == "TSC","DALY_2yr"]) - mean(severity_DALY[severity_DALY[["study_arm"]] == "EUC","DALY_2yr"])
+
+incremental_cost_per / -incremental_DALY_per
+```
+
+CEA threshold: 0.5 * GDPpc (2000 dollars in Nigeria) = 1000

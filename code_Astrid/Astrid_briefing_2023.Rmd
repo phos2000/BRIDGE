@@ -1346,6 +1346,8 @@ severity_DALY %>%
   group_by(study_arm) %>%
   summarize(mean(DALY_2yr) / 2)
 
+save(severity_DALY, cTSC, cEUC, file = "CEA_Bridge.RData")
+
 ```
 
 incremental cost (in Naira) for TSC - EUC per patient = 3203.91(2-yr) / 2829.74(3-yr)
