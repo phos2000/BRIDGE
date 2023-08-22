@@ -9,7 +9,10 @@ output:
 ---
 
 ```{r setup}
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
 library(tidyverse)
+library(kableExtra)
 ```
 
 Source: Local collection
@@ -176,7 +179,9 @@ Because EUC and TSC have different numbers of patients, we need to divide the su
 
 As there're people dropout, finally people who didn't drop out making sense. So we need to have people at the final 10th visit's DALY and the cost for all people. 
 
-```{r CEA}
+To do: include benefits from drop-out. 
+
+```{r CEA_DALY}
 load("CEA_Bridge.RData")
 
 severity_DALY %>% count(study_arm)
@@ -192,4 +197,55 @@ incremental_DALY_per = mean(severity_DALY[severity_DALY[["study_arm"]] == "TSC",
 incremental_cost_per / -incremental_DALY_per
 ```
 
-CEA threshold: 0.5 * GDPpc (2000 dollars in Nigeria) = 1000
+CEA threshold: 0.5 * GDPpc (2523 dollars in Nigeria (2023)) = 1261
+
+https://tradingeconomics.com/nigeria/gdp-per-capita
+
+0.5 from Ashley's slides
+
+Next steps (Bridge, Astrid):  
+1. Let’s see how to include the benefits of those who drop out (but the cost has already delete drop-out)
+2. ICER from VAS and QALYs — all the work you did before :)  
+3. ICER, for major outcomes, re. Seizures (I.e., cost per seizures avoided or cost per seizure free)  
+
+```{r CEA_QALY}
+qaly_vas = fcf_i %>% 
+  group_by(study_arm, visit) %>%
+  summarise(vas = mean(qolie)/100) %>% spread(visit, vas, sep = "") %>% 
+  mutate(QALY_2yr = visit2 * 1/12 + visit3 * 1/12 + visit4 * 2/12 + visit5 * 2/12 + visit6 * 3/12 + visit7 * 3/12 + visit8 * 3/12 +  visit9 * 3/12 + visit10 * 6/12)
+
+qaly_qolie = data_qolie %>% select(-qolie_sd) %>% spread(visit, qolie, sep = "") %>%
+  mutate(QALY_2yr = (visit3 * 2/12 + visit10 * 22/12)/100)
+
+qaly_vas %>%
+  kable(caption = "QALY based on VAS") %>%
+  kable_styling()
+
+qaly_qolie %>%
+  kable(caption = "QALY based on QOLIE") %>%
+  kable_styling()
+
+incremental_QALY_vas = qaly_vas[qaly_vas[["study_arm"]] == "TSC", "QALY_2yr"] - qaly_vas[qaly_vas[["study_arm"]] == "EUC", "QALY_2yr"]
+
+incremental_cost_per / incremental_QALY_vas
+
+incremental_QALY_qolie = qaly_qolie[qaly_qolie[["study_arm"]] == "TSC", "QALY_2yr"] - qaly_qolie[qaly_qolie[["study_arm"]] == "EUC", "QALY_2yr"]
+
+incremental_cost_per / incremental_QALY_qolie
+```
+
+```{r outcome}
+cost = data.frame("study_arm" = c("EUC", "TSC"), "cost" = c(cTSC / nrow(severity_DALY[severity_DALY[["study_arm"]] == "TSC",]), cEUC / nrow(severity_DALY[severity_DALY[["study_arm"]] == "EUC",])))
+
+seizure_outcome = seizure_times %>% 
+  group_by(study_arm, visit) %>%
+  summarise(seiz_freq = mean(seiz_freq)) %>% spread(visit, seiz_freq, sep = "") %>%
+  mutate(seizure_avoided = visit1 * 24 - (visit2 * 1/12 + visit3 * 1/12 + visit4 * 2/12 + visit5 * 2/12 + visit6 * 3/12 + visit7 * 3/12 + visit8 * 3/12 +  visit9 * 3/12 + visit10 * 6/12) * 12) %>%
+  left_join(cost, by = "study_arm") %>%
+  mutate(cost_per_seizure_avoided = cost / seizure_avoided)
+
+seizure_outcome %>%
+  kable(caption = "Outcome: seizure avoided") %>%
+  kable_styling()
+
+```
