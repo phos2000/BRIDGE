@@ -11,7 +11,7 @@
 
 <meta name="author" content="Astrid" />
 
-<meta name="date" content="2023-08-22" />
+<meta name="date" content="2023-09-27" />
 
 <title>BRIDGE Cost</title>
 
@@ -1711,7 +1711,7 @@ border-radius: 0px;
 
 <h1 class="title toc-ignore">BRIDGE Cost</h1>
 <h4 class="author">Astrid</h4>
-<h4 class="date">2023-08-22</h4>
+<h4 class="date">2023-09-27</h4>
 
 </div>
 
@@ -1736,6 +1736,8 @@ library(tidyverse)</code></pre>
 ## The following object is masked from &#39;package:dplyr&#39;:
 ## 
 ##     group_rows</code></pre>
+<div id="cost-collection" class="section level1">
+<h1>Cost Collection</h1>
 <p>Source: Local collection Currency: Originially Naira, Need to be
 converted into USD based on the 2023 exchange rate: 540.8564</p>
 <p><a href="https://www.exchangerates.org.uk/USD-NGN-spot-exchange-rates-history-2023.html" class="uri">https://www.exchangerates.org.uk/USD-NGN-spot-exchange-rates-history-2023.html</a></p>
@@ -1884,12 +1886,16 @@ cTSC</code></pre>
 <pre><code>## [1] 20954.66</code></pre>
 <pre class="r"><code>cEUC</code></pre>
 <pre><code>## [1] 18383.21</code></pre>
+</div>
+<div id="cost-daly" class="section level1">
+<h1>Cost &amp; DALY</h1>
 <p>Because EUC and TSC have different numbers of patients, we need to
 divide the summed number by the numbers of patients.</p>
 <p>As there’re people dropout, finally people who didn’t drop out making
 sense. So we need to have people at the final 10th visit’s DALY and the
 cost for all people.</p>
-<p>To do: include benefits from drop-out.</p>
+<div id="without-drop-out-people" class="section level2">
+<h2>without drop-out people</h2>
 <pre class="r"><code>load(&quot;CEA_Bridge.RData&quot;)
 
 severity_DALY %&gt;% count(study_arm)</code></pre>
@@ -1907,6 +1913,66 @@ mean(severity_DALY[severity_DALY[[&quot;study_arm&quot;]] == &quot;TSC&quot;,&qu
 
 incremental_cost_per / -incremental_DALY_per</code></pre>
 <pre><code>## [1] 96.82401</code></pre>
+</div>
+<div id="with-drop-out-people" class="section level2">
+<h2>with drop-out people</h2>
+<p>After dropping out, we’ll set their state to be just the same as
+previous.</p>
+<pre class="r"><code>severity_wNA = seizure_times %&gt;% select(record_id, visit, study_arm, seiz_freq) %&gt;% spread(visit, seiz_freq, sep = &quot;&quot;)
+  
+# severity_DALY %&gt;% filter(is.na(visit1))
+
+severity_censored = severity_wNA %&gt;%
+  filter(!(is.na(visit1) &amp; is.na(visit2))) %&gt;% 
+  mutate(visit2 = ifelse(is.na(visit2), visit1, visit2),
+         visit3 = ifelse(is.na(visit3), visit2, visit3),
+         visit4 = ifelse(is.na(visit4), visit3, visit4),
+         visit5 = ifelse(is.na(visit5), visit4, visit5),
+         visit6 = ifelse(is.na(visit6), visit5, visit6),
+         visit7 = ifelse(is.na(visit7), visit6, visit7),
+         visit8 = ifelse(is.na(visit8), visit7, visit8),
+         visit9 = ifelse(is.na(visit9), visit8, visit9),
+         visit10 = ifelse(is.na(visit10), visit9, visit10))
+
+severity_censored = severity_censored %&gt;%
+  mutate(
+    zero_0_12 = ifelse(visit1 == 0 &amp; visit2 == 0 &amp; visit3 == 0 &amp; visit4 == 0 &amp; visit5 == 0 &amp; visit6 == 0 &amp; visit7 == 0, TRUE, FALSE),
+    zero_3_15 = ifelse(visit3 == 0 &amp; visit4 == 0 &amp; visit5 == 0 &amp; visit6 == 0 &amp; visit7 == 0 &amp; visit8 == 0, TRUE, FALSE),
+    zero_6_18 = ifelse(visit5 == 0 &amp; visit6 == 0 &amp; visit7 == 0 &amp; visit8 == 0 &amp; visit9 == 0, TRUE, FALSE)) %&gt;%
+  mutate(across(starts_with(&quot;visit&quot;), ~ ifelse(.x &gt;= 1, &quot;severe epilepsy&quot;, &quot;less severe epilepsy&quot;), .names = &quot;severity_{.col}&quot;)) %&gt;%
+  mutate(severity_visit8 = ifelse(isTRUE(zero_0_12) &amp; visit8 == 0, &quot;seizure-free, treated&quot;, severity_visit8),
+         severity_visit9 = ifelse(isTRUE(zero_3_15) &amp; visit9 == 0, &quot;seizure-free, treated&quot;, severity_visit9),
+         severity_visit10 = ifelse(isTRUE(zero_6_18) &amp; visit10 == 0, &quot;seizure-free, treated&quot;, severity_visit9))
+
+severity_DALY = severity_censored %&gt;% 
+  mutate(across(starts_with(&quot;severity_visit&quot;), ~ ifelse(.x == &quot;severe epilepsy&quot;, 0.552, ifelse(.x == &quot;less severe epilepsy&quot;, 0.263, 0.049)), .names = &quot;DALYw_{.col}&quot;)) %&gt;% select(-DALYw_severity_visit1) %&gt;%
+  mutate(DALY_2yr = DALYw_severity_visit2 * 1/12 + DALYw_severity_visit3 * 1/12 + DALYw_severity_visit4 * 2/12 + DALYw_severity_visit5 * 2/12 + DALYw_severity_visit6 * 3/12 + DALYw_severity_visit7 * 3/12 + DALYw_severity_visit8 * 3/12 +  DALYw_severity_visit9 * 3/12 + DALYw_severity_visit10 * 6/12)
+
+#severity_DALY %&gt;% filter(is.na(DALY_2yr))
+
+severity_DALY %&gt;%
+  group_by(study_arm) %&gt;%
+  summarize(mean(DALY_2yr) / 2)</code></pre>
+<pre><code>## # A tibble: 2 × 2
+##   study_arm `mean(DALY_2yr)/2`
+##   &lt;chr&gt;                  &lt;dbl&gt;
+## 1 EUC                    0.346
+## 2 TSC                    0.330</code></pre>
+<pre class="r"><code>severity_DALY %&gt;% count(study_arm)</code></pre>
+<pre><code>##   study_arm   n
+## 1       EUC 859
+## 2       TSC 859</code></pre>
+<pre class="r"><code>incremental_cost_per = cTSC / nrow(severity_DALY[severity_DALY[[&quot;study_arm&quot;]] == &quot;TSC&quot;,]) - 
+  cEUC / nrow(severity_DALY[severity_DALY[[&quot;study_arm&quot;]] == &quot;EUC&quot;,])
+
+mean(severity_DALY[severity_DALY[[&quot;study_arm&quot;]] == &quot;TSC&quot;,&quot;DALY_2yr&quot;])</code></pre>
+<pre><code>## [1] 0.6600144</code></pre>
+<pre class="r"><code>mean(severity_DALY[severity_DALY[[&quot;study_arm&quot;]] == &quot;EUC&quot;,&quot;DALY_2yr&quot;])</code></pre>
+<pre><code>## [1] 0.6926208</code></pre>
+<pre class="r"><code>incremental_DALY_per = mean(severity_DALY[severity_DALY[[&quot;study_arm&quot;]] == &quot;TSC&quot;,&quot;DALY_2yr&quot;]) - mean(severity_DALY[severity_DALY[[&quot;study_arm&quot;]] == &quot;EUC&quot;,&quot;DALY_2yr&quot;])
+
+incremental_cost_per / -incremental_DALY_per</code></pre>
+<pre><code>## [1] 91.80799</code></pre>
 <p>CEA threshold: 0.5 * GDPpc (2523 dollars in Nigeria (2023)) =
 1261</p>
 <p><a href="https://tradingeconomics.com/nigeria/gdp-per-capita" class="uri">https://tradingeconomics.com/nigeria/gdp-per-capita</a></p>
@@ -1917,6 +1983,10 @@ cost has already delete drop-out) 2. ICER from VAS and QALYs — all the
 work you did before :)<br />
 3. ICER, for major outcomes, re. Seizures (I.e., cost per seizures
 avoided or cost per seizure free)</p>
+</div>
+</div>
+<div id="qaly-cea" class="section level1">
+<h1>QALY &amp; CEA</h1>
 <pre class="r"><code>qaly_vas = fcf_i %&gt;% 
   group_by(study_arm, visit) %&gt;%
   summarise(vas = mean(qolie)/100) %&gt;% spread(visit, vas, sep = &quot;&quot;) %&gt;% 
@@ -2127,12 +2197,15 @@ TSC
 
 incremental_cost_per / incremental_QALY_vas</code></pre>
 <pre><code>##   QALY_2yr
-## 1 22.59944</code></pre>
+## 1 15.63063</code></pre>
 <pre class="r"><code>incremental_QALY_qolie = qaly_qolie[qaly_qolie[[&quot;study_arm&quot;]] == &quot;TSC&quot;, &quot;QALY_2yr&quot;] - qaly_qolie[qaly_qolie[[&quot;study_arm&quot;]] == &quot;EUC&quot;, &quot;QALY_2yr&quot;]
 
 incremental_cost_per / incremental_QALY_qolie</code></pre>
 <pre><code>##   QALY_2yr
-## 1 119.7542</code></pre>
+## 1 82.82653</code></pre>
+</div>
+<div id="other-outcomes" class="section level1">
+<h1>Other outcomes</h1>
 <pre class="r"><code>cost = data.frame(&quot;study_arm&quot; = c(&quot;EUC&quot;, &quot;TSC&quot;), &quot;cost&quot; = c(cTSC / nrow(severity_DALY[severity_DALY[[&quot;study_arm&quot;]] == &quot;TSC&quot;,]), cEUC / nrow(severity_DALY[severity_DALY[[&quot;study_arm&quot;]] == &quot;EUC&quot;,])))
 
 seizure_outcome = seizure_times %&gt;% 
@@ -2234,10 +2307,10 @@ EUC
 228.0105
 </td>
 <td style="text-align:right;">
-41.16828
+24.39424
 </td>
 <td style="text-align:right;">
-0.1805543
+0.1069874
 </td>
 </tr>
 <tr>
@@ -2278,14 +2351,15 @@ TSC
 132.0728
 </td>
 <td style="text-align:right;">
-36.84011
+21.40071
 </td>
 <td style="text-align:right;">
-0.2789380
+0.1620373
 </td>
 </tr>
 </tbody>
 </table>
+</div>
 
 
 

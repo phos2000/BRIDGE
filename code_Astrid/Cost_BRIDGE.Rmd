@@ -15,6 +15,8 @@ library(tidyverse)
 library(kableExtra)
 ```
 
+# Cost Collection
+
 Source: Local collection
 Currency: Originially Naira, Need to be converted into USD based on the 2023 exchange rate: 540.8564
 
@@ -175,11 +177,13 @@ cTSC
 cEUC
 ```
 
+# Cost & DALY
+
 Because EUC and TSC have different numbers of patients, we need to divide the summed number by the numbers of patients. 
 
 As there're people dropout, finally people who didn't drop out making sense. So we need to have people at the final 10th visit's DALY and the cost for all people. 
 
-To do: include benefits from drop-out. 
+## without drop-out people
 
 ```{r CEA_DALY}
 load("CEA_Bridge.RData")
@@ -197,6 +201,61 @@ incremental_DALY_per = mean(severity_DALY[severity_DALY[["study_arm"]] == "TSC",
 incremental_cost_per / -incremental_DALY_per
 ```
 
+## with drop-out people
+
+After dropping out, we'll set their state to be just the same as previous.
+
+```{r with-drop-out}
+severity_wNA = seizure_times %>% select(record_id, visit, study_arm, seiz_freq) %>% spread(visit, seiz_freq, sep = "")
+  
+# severity_DALY %>% filter(is.na(visit1))
+
+severity_censored = severity_wNA %>%
+  filter(!(is.na(visit1) & is.na(visit2))) %>% 
+  mutate(visit2 = ifelse(is.na(visit2), visit1, visit2),
+         visit3 = ifelse(is.na(visit3), visit2, visit3),
+         visit4 = ifelse(is.na(visit4), visit3, visit4),
+         visit5 = ifelse(is.na(visit5), visit4, visit5),
+         visit6 = ifelse(is.na(visit6), visit5, visit6),
+         visit7 = ifelse(is.na(visit7), visit6, visit7),
+         visit8 = ifelse(is.na(visit8), visit7, visit8),
+         visit9 = ifelse(is.na(visit9), visit8, visit9),
+         visit10 = ifelse(is.na(visit10), visit9, visit10))
+
+severity_censored = severity_censored %>%
+  mutate(
+    zero_0_12 = ifelse(visit1 == 0 & visit2 == 0 & visit3 == 0 & visit4 == 0 & visit5 == 0 & visit6 == 0 & visit7 == 0, TRUE, FALSE),
+    zero_3_15 = ifelse(visit3 == 0 & visit4 == 0 & visit5 == 0 & visit6 == 0 & visit7 == 0 & visit8 == 0, TRUE, FALSE),
+    zero_6_18 = ifelse(visit5 == 0 & visit6 == 0 & visit7 == 0 & visit8 == 0 & visit9 == 0, TRUE, FALSE)) %>%
+  mutate(across(starts_with("visit"), ~ ifelse(.x >= 1, "severe epilepsy", "less severe epilepsy"), .names = "severity_{.col}")) %>%
+  mutate(severity_visit8 = ifelse(isTRUE(zero_0_12) & visit8 == 0, "seizure-free, treated", severity_visit8),
+         severity_visit9 = ifelse(isTRUE(zero_3_15) & visit9 == 0, "seizure-free, treated", severity_visit9),
+         severity_visit10 = ifelse(isTRUE(zero_6_18) & visit10 == 0, "seizure-free, treated", severity_visit9))
+
+severity_DALY = severity_censored %>% 
+  mutate(across(starts_with("severity_visit"), ~ ifelse(.x == "severe epilepsy", 0.552, ifelse(.x == "less severe epilepsy", 0.263, 0.049)), .names = "DALYw_{.col}")) %>% select(-DALYw_severity_visit1) %>%
+  mutate(DALY_2yr = DALYw_severity_visit2 * 1/12 + DALYw_severity_visit3 * 1/12 + DALYw_severity_visit4 * 2/12 + DALYw_severity_visit5 * 2/12 + DALYw_severity_visit6 * 3/12 + DALYw_severity_visit7 * 3/12 + DALYw_severity_visit8 * 3/12 +  DALYw_severity_visit9 * 3/12 + DALYw_severity_visit10 * 6/12)
+
+#severity_DALY %>% filter(is.na(DALY_2yr))
+
+severity_DALY %>%
+  group_by(study_arm) %>%
+  summarize(mean(DALY_2yr) / 2)
+
+severity_DALY %>% count(study_arm)
+
+incremental_cost_per = cTSC / nrow(severity_DALY[severity_DALY[["study_arm"]] == "TSC",]) - 
+  cEUC / nrow(severity_DALY[severity_DALY[["study_arm"]] == "EUC",])
+
+mean(severity_DALY[severity_DALY[["study_arm"]] == "TSC","DALY_2yr"])
+mean(severity_DALY[severity_DALY[["study_arm"]] == "EUC","DALY_2yr"])
+
+incremental_DALY_per = mean(severity_DALY[severity_DALY[["study_arm"]] == "TSC","DALY_2yr"]) - mean(severity_DALY[severity_DALY[["study_arm"]] == "EUC","DALY_2yr"])
+
+incremental_cost_per / -incremental_DALY_per
+
+```
+
 CEA threshold: 0.5 * GDPpc (2523 dollars in Nigeria (2023)) = 1261
 
 https://tradingeconomics.com/nigeria/gdp-per-capita
@@ -207,6 +266,8 @@ Next steps (Bridge, Astrid):
 1. Let’s see how to include the benefits of those who drop out (but the cost has already delete drop-out)
 2. ICER from VAS and QALYs — all the work you did before :)  
 3. ICER, for major outcomes, re. Seizures (I.e., cost per seizures avoided or cost per seizure free)  
+
+# QALY & CEA
 
 ```{r CEA_QALY}
 qaly_vas = fcf_i %>% 
@@ -233,6 +294,8 @@ incremental_QALY_qolie = qaly_qolie[qaly_qolie[["study_arm"]] == "TSC", "QALY_2y
 
 incremental_cost_per / incremental_QALY_qolie
 ```
+
+# Other outcomes
 
 ```{r outcome}
 cost = data.frame("study_arm" = c("EUC", "TSC"), "cost" = c(cTSC / nrow(severity_DALY[severity_DALY[["study_arm"]] == "TSC",]), cEUC / nrow(severity_DALY[severity_DALY[["study_arm"]] == "EUC",])))

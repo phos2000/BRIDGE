@@ -1,0 +1,62 @@
+---
+title: "Detailed DALY & Cycle Check"
+author: "Astrid Yu, Ashley Leech"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+library(tidyverse)
+```
+
+
+
+### intervals
+
+**Expected schedule of follow-up visits** Only the first follow-up needs to be +/- 3 days, all else allow +/- 14 days.\
+*Schedule:*\
+\* instance 1 - Week 1\
+\* instance 2 - Month 1\
+\* instance 3 - Month 2\
+\* instance 4 - Month 4\
+\* instance 5 - Month 6\
+\* instance 6 - Month 9\
+\* instance 7 - Month 12\
+\* instance 8 - Month 15\
+\* instance 9 - Month 18\
+\* instance 10 - Month 24\
+*Expected time interval:*\
+\* v1: 7 +/- 3 from v0\
+\* v2: 28 +/- 14 from v0\
+\* v3: 28 +/- 14 from v2\
+\* v4: 56 +/- 14 from v3\
+\* v5: 56 +/- 14 from v4\
+\* v6: 84 +/- 14 from v5\
+\* v7: 84 +/- 14 from v6\
+\* v8: 84 +/- 14 from v7\
+\* v9: 84 +/- 14 from v8\
+\* v10: 168 +/- 14 from v9
+
+**549 / 1792**
+
+```{r elig-fu}
+fudw %>% filter(date_1 > date_0 + 10 | date_1 < date_0 + 4)
+fudw %>% filter(date_2 > date_0 + 42 | date_2 < date_0 + 14)
+fudw %>% filter(date_3 > date_2 + 42 | date_3 < date_2 + 14)
+fudw %>% filter(date_4 > date_3 + 70 | date_4 < date_3 + 42)
+fudw %>% filter(date_5 > date_4 + 70 | date_5 < date_4 + 42)
+fudw %>% filter(date_6 > date_5 + 98 | date_6 < date_5 + 70)
+fudw %>% filter(date_7 > date_6 + 98 | date_7 < date_6 + 70)
+fudw %>% filter(date_8 > date_7 + 98 | date_8 < date_7 + 70)
+fudw %>% filter(date_9 > date_8 + 98 | date_9 < date_8 + 70)
+fudw %>% filter(date_10 > date_9 + 182 | date_10 < date_9 + 154)
+
+fudw %>% filter(date_1 > date_0 + 10 | date_1 < date_0 + 4 | date_2 > date_0 + 42 | date_2 < date_0 + 14 | date_3 > date_2 + 42 | date_3 < date_2 + 14 | date_4 > date_3 + 70 | date_4 < date_3 + 42 | date_5 > date_4 + 70 | date_5 < date_4 + 42 | date_6 > date_5 + 98 | date_6 < date_5 + 70 | date_7 > date_6 + 98 | date_7 < date_6 + 70 | date_8 > date_7 + 98 | date_8 < date_7 + 70 | date_9 > date_8 + 98 | date_9 < date_8 + 70 | date_10 > date_9 + 182 | date_10 < date_9 + 154)
+
+```
