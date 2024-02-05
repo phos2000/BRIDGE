@@ -13,6 +13,7 @@ knitr::opts_chunk$set(warning = FALSE)
 knitr::opts_chunk$set(message = FALSE)
 library(tidyverse)
 library(kableExtra)
+library(parallel)
 ```
 
 # Cost Collection
@@ -126,10 +127,31 @@ nTravel_CHW_EUC = 0
 
 ```
 
+```{r sa_params}
+params_for_sa = c(ls()[grepl("^c[A-Z]", ls())], ls()[grepl("^n[A-Z]", ls())])
+params_CI = list()
+
+for (param in params_for_sa) {
+  if (startsWith(param, "c")) {
+    # cost
+    params_CI[[paste0(param, "_dist")]] = "gamma"
+  } else {
+    params_CI[[paste0(param, "_dist")]] = "normal"
+  }
+  params_CI[[param]] = eval(parse(text = param))
+  params_CI[[paste0(param, "_low")]] = eval(parse(text = param)) * 0.5
+  params_CI[[paste0(param, "_upp")]] = eval(parse(text = param)) * 1.5
+}
+
+params_CI
+```
+
+
 Use two arms' sum costs's difference to calculate!!
 
 ```{r cost_sum}
-cTSC = cVisit_CHW_2023*exchange_Naira_to_USD*nVisit_CHW_TSC +
+cTSC_sum = function(){
+  cVisit_CHW_2023*exchange_Naira_to_USD*nVisit_CHW_TSC +
   cVisit_Physician_Private_2023 * exchange_Naira_to_USD * nVisit_Physician_Private_TSC + 
   cVisit_Physician_Gov_2023 * exchange_Naira_to_USD * nVisit_Physician_Gov_TSC +
   cSupervision_CHW_2023 * exchange_Naira_to_USD * nSupervision_CHW_TSC +
@@ -150,8 +172,10 @@ cTSC = cVisit_CHW_2023*exchange_Naira_to_USD*nVisit_CHW_TSC +
   cTraining_Admin_2023 * exchange_Naira_to_USD * nTraining_Admin_TSC + 
   cTravel_Facilitator_2023 * exchange_Naira_to_USD * nTravel_Facilitator_TSC +
   cTravel_CHW_2023 * exchange_Naira_to_USD * nTravel_CHW_TSC
+  }
 
-cEUC = cVisit_CHW_2023*exchange_Naira_to_USD*nVisit_CHW_EUC +
+cEUC_sum = function(){
+  cVisit_CHW_2023*exchange_Naira_to_USD*nVisit_CHW_EUC +
   cVisit_Physician_Private_2023 * exchange_Naira_to_USD * nVisit_Physician_Private_EUC + 
   cVisit_Physician_Gov_2023 * exchange_Naira_to_USD * nVisit_Physician_Gov_EUC +
   cSupervision_CHW_2023 * exchange_Naira_to_USD * nSupervision_CHW_EUC +
@@ -172,9 +196,10 @@ cEUC = cVisit_CHW_2023*exchange_Naira_to_USD*nVisit_CHW_EUC +
   cTraining_Admin_2023 * exchange_Naira_to_USD * nTraining_Admin_EUC + 
   cTravel_Facilitator_2023 * exchange_Naira_to_USD * nTravel_Facilitator_EUC +
   cTravel_CHW_2023 * exchange_Naira_to_USD * nTravel_CHW_EUC
+}
 
-cTSC
-cEUC
+cTSC = cTSC_sum()
+cEUC = cEUC_sum()
 ```
 
 # Cost & DALY
@@ -262,11 +287,6 @@ https://tradingeconomics.com/nigeria/gdp-per-capita
 
 0.5 from Ashley's slides
 
-Next steps (Bridge, Astrid):  
-1. Let’s see how to include the benefits of those who drop out (but the cost has already delete drop-out)
-2. ICER from VAS and QALYs — all the work you did before :)  
-3. ICER, for major outcomes, re. Seizures (I.e., cost per seizures avoided or cost per seizure free)  
-
 # QALY & CEA
 
 ```{r CEA_QALY}
@@ -311,4 +331,53 @@ seizure_outcome %>%
   kable(caption = "Outcome: seizure avoided") %>%
   kable_styling()
 
+```
+
+# Sensitivity Analysis
+
+## Cost
+
+```{r cost_SA}
+source("random_draws_for_BRIDGE_PSAs.R")
+
+n_PSA = 10000
+n_cores = detectCores() - 1
+
+params_psa = sapply(params_for_sa, function(param) {
+  set.seed(101)
+  print(param)
+  randomDraw(param, params_CI, n_PSA)})
+
+costs_PSA <- mclapply(1:n_PSA, mc.cores = n_cores, FUN = function(x){
+  sapply(params_for_sa, function(param){ assign(param, params_psa[x, param], envir = .GlobalEnv)})
+  incremental_cost_per = cTSC_sum() / nrow(severity_DALY[severity_DALY[["study_arm"]] == "TSC",]) - 
+  cEUC_sum() / nrow(severity_DALY[severity_DALY[["study_arm"]] == "EUC",])
+  return(incremental_cost_per)
+})
+
+incremental_cost_per
+hist(unlist(costs_PSA))
+```
+
+## Bootstrap for Distribution of DALY-related seizure freq
+
+```{r}
+severity_TSC = subset(severity_DALY, study_arm == "TSC")
+severity_EUC = subset(severity_DALY, study_arm == "EUC")
+
+bootstrap_psa <- unlist(mclapply(1:n_PSA, mc.cores = n_cores, FUN = function(x){
+  sample_TSC = severity_TSC[sample(1:nrow(severity_TSC), size = nrow(severity_TSC), replace = TRUE), ]
+  sample_EUC = severity_EUC[sample(1:nrow(severity_EUC), size = nrow(severity_EUC), replace = TRUE), ]
+  return(mean(sample_TSC[,"DALY_2yr"]) - mean(sample_EUC[,"DALY_2yr"]))
+  }))
+```
+
+## Whole PSA
+
+```{r}
+CEA_PSA = unlist(map2(unlist(costs_PSA), bootstrap_psa,function(x, y){x/-y}))
+
+hist(CEA_PSA)
+boxplot(CEA_PSA)
+mean(CEA_PSA)
 ```
